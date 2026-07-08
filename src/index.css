@@ -1,0 +1,56 @@
+@import "tailwindcss";
+
+/* Custom scrollbar for better aesthetics */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9; /* slate-100 */
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1; /* slate-300 */
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8; /* slate-400 */
+}
+
+/* Firefox scrollbar support */
+html {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f1f5f9; /* thumb track */
+}
+
+/* Infinite marquee — N copies, shift by 100/N% = one set width, seamless */
+@keyframes marquee {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(calc(-100% / var(--copies, 2))); }
+}
+@keyframes marquee-rtl {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(calc(100% / var(--copies, 2))); }
+}
+.marquee-track {
+  width: max-content !important;
+  display: flex !important;
+}
+
+@keyframes progress-bar {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.animate-progress-bar {
+  animation: progress-bar 1.5s infinite ease-in-out;
+}
+
+

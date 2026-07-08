@@ -1,0 +1,30 @@
+{
+  "name": "gcm",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:worker": "wrangler dev",
+    "build": "vite build",
+    "deploy": "npm run build && wrangler deploy",
+    "preview": "wrangler dev"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.110.0",
+    "hono": "^4.12.28",
+    "lucide-react": "^1.23.0",
+    "motion": "^12.42.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260708.1",
+    "@tailwindcss/vite": "^4.0.0",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^4.3.1",
+    "tailwindcss": "^4.0.0",
+    "vite": "^6.4.3",
+    "wrangler": "^4.108.0"
+  }
+}
