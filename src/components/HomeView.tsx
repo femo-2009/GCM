@@ -419,9 +419,9 @@ export default function HomeView({ lang, user, groups, setGroups, onNavigate }: 
                 return (
                   <div
                     key={`${leader.id}-${index}`}
-                    className="w-[280px] sm:w-[300px] shrink-0 bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm flex flex-col group hover:border-indigo-500/30 transition-all duration-300"
+                    className="w-[200px] sm:w-[260px] shrink-0 bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm flex flex-col group hover:border-indigo-500/30 transition-all duration-300"
                   >
-                    <div className="relative h-44 overflow-hidden bg-slate-100">
+                    <div className="relative h-32 sm:h-44 overflow-hidden bg-slate-100">
                       <img 
                         src={leader.photo} 
                         alt={leader.name}
