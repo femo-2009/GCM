@@ -30,7 +30,7 @@ export const translations = {
     logout: 'تسجيل الخروج',
     
     // Home Page
-    leadersSliderTitle: 'خدام وقادة المجموعات',
+    leadersSliderTitle: 'خدام وقادة الفرق',
     visitGroup: 'زيارة المجموعة',
     leadersList: 'قائمة القادة',
     addLeader: 'إضافة قائد جديد',
@@ -40,7 +40,7 @@ export const translations = {
     leaderDesc: 'وصف أو نبذة عن القائد',
     selectGroup: 'اختر المجموعة المرتبط بها',
     noGroup: 'لا يوجد مجموعة مرتبطة',
-    generalPlanTitle: 'الخطة العامة للموقع',
+    generalPlanTitle: 'الخطة العامة',
     seeMoreDetails: 'رؤية المزيد من التفاصيل',
     editGeneralPlan: 'تعديل الخطة العامة',
     editWelcomeMsg: 'تعديل رسالة الترحيب',
