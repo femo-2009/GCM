@@ -123,7 +123,7 @@ export default function App() {
           <div>{t.footerCopyright}</div>
           <div className="mt-1">
             {t.footerDeveloperLabel}{' — '}
-            <a href="https://afraim-porfiolio.afraimfarag7.workers.dev/" target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline font-semibold">
+            <a href="https://afraim-porfolio.afraimfarag7.workers.dev/" target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline font-semibold">
               {t.footerDeveloperLink}
             </a>
           </div>
