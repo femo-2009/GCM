@@ -24,7 +24,7 @@ export const translations = {
     welcome: 'مرحباً بك',
     home: 'الرئيسية',
     library: 'المكتبة',
-    groups: 'المجموعات',
+    groups: 'الفرق',
     gcm: 'أنا',
     adminPanel: 'لوحة التحكم',
     logout: 'تسجيل الخروج',
