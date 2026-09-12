@@ -174,7 +174,7 @@ app.post('/api/home/plan', authenticateUser, async (c) => {
 });
 
 // Leaders routes
-app.get('/api/leaders', async (c) => {
+app.get('/api/leaders', authenticateUser, async (c) => {
   try {
     const supabase = createSupabaseClient(c.env);
     const appData = await getAppData(supabase);
