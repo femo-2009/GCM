@@ -58,7 +58,12 @@ export default function HomeView({ lang, user, groups, setGroups, onNavigate }: 
 
   const fetchData = async () => {
     try {
-      const res = await fetch('/api/home');
+        const { data: { session } } = await supabase.auth.getSession();
+        const res = await fetch('/api/home', {
+          headers: {
+            Authorization: `Bearer ${session?.access_token || ''}`,
+          },
+        });
       const data = await res.json();
       setHomeConfig(data.homeConfig);
       setLeaders(data.leaders);
