@@ -511,7 +511,7 @@ app.post('/api/videos/register', authenticateUser, async (c) => {
 });
 
 // Video stream - concatenate parts from Supabase Storage on-the-fly
-app.get('/api/videos/stream/:id', async (c) => {
+app.get('/api/videos/stream/:id', authenticateUser, async (c) => {
   try {
     const supabase = createSupabaseClient(c.env);
     const { data: video, error } = await supabase.from('videos').select('*').eq('id', c.req.param('id')).single();
