@@ -122,7 +122,7 @@ app.get('/api/auth/profile', authenticateUser, async (c) => {
 });
 
 // Home routes
-app.get('/api/home', async (c) => {
+app.get('/api/home', authenticateUser, async (c) => {
   try {
     const supabase = createSupabaseClient(c.env);
     const appData = await getAppData(supabase);
