@@ -23,12 +23,28 @@ export default function GroupsView({ lang, user, groups, setGroups, onNavigate }
   // All leaders (for display and assignment)
   const [leaders, setLeaders] = useState<Leader[]>([]);
 
-  useEffect(() => {
-    fetch('/api/leaders')
-      .then((r) => r.json())
-      .then(setLeaders)
-      .catch(console.error);
-  }, []);
+    useEffect(() => {
+      const loadLeaders = async () => {
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          const response = await fetch('/api/leaders', {
+            headers: {
+              Authorization: `Bearer ${session?.access_token || ''}`,
+            },
+          });
+
+          if (!response.ok) {
+            throw new Error(`Failed to load leaders: ${response.status}`);
+          }
+
+          setLeaders(await response.json());
+        } catch (error) {
+          console.error(error);
+        }
+      };
+
+      loadLeaders();
+    }, []);
 
   // Auto-open a specific group's detail modal when navigated from leader slider
   useEffect(() => {
