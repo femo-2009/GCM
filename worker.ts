@@ -311,7 +311,7 @@ app.delete('/api/groups/:id', authenticateUser, async (c) => {
 });
 
 // Library routes
-app.get('/api/library', async (c) => {
+app.get('/api/library', authenticateUser, async (c) => {
   try {
     const supabase = createSupabaseClient(c.env);
     const appData = await getAppData(supabase);
