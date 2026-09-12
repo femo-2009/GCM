@@ -141,10 +141,23 @@ export default function GroupsView({ lang, user, groups, setGroups, onNavigate }
         }
 
         // Refresh groups
-        const freshRes = await fetch('/api/home');
-        const freshData = await freshRes.json();
-        setGroups(freshData.groups);
 
+        const { data: { session: refreshSession } } =
+          await supabase.auth.getSession();
+
+        const freshRes = await fetch('/api/home', {
+          headers: {
+            Authorization: `Bearer ${refreshSession?.access_token || ''}`,
+          },
+        });
+
+        if (!freshRes.ok) {
+          throw new Error(`Failed to refresh groups: ${freshRes.status}`);
+        }
+
+        const freshData = await freshRes.json();
+        setGroups(freshData.groups || []);
+        
         // Re-fetch leaders to reflect changes
         const freshLeaders = await fetch('/api/leaders');
         setLeaders(await freshLeaders.json());
