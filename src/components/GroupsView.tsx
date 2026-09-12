@@ -159,7 +159,16 @@ export default function GroupsView({ lang, user, groups, setGroups, onNavigate }
         setGroups(freshData.groups || []);
         
         // Re-fetch leaders to reflect changes
-        const freshLeaders = await fetch('/api/leaders');
+        const freshLeaders = await fetch('/api/leaders', {
+          headers: {
+            Authorization: `Bearer ${refreshSession?.access_token || ''}`,
+          },
+        });
+
+        if (!freshLeaders.ok) {
+          throw new Error(`Failed to refresh leaders: ${freshLeaders.status}`);
+        }
+
         setLeaders(await freshLeaders.json());
 
         // Reset
