@@ -24,7 +24,11 @@ const authenticateUser = async (c: any, next: any) => {
   if (error || !user) {
     return c.json({ error: 'Unauthorized - Invalid token' }, 401);
   }
-  c.set('user', await ensureUserProfile(supabase, user));
+  const profile = await ensureUserProfile(supabase, user);
+  if (!profile || profile.status !== 'approved') {
+    return c.json({ error: 'Forbidden - Account is not approved' }, 403);
+  }
+  c.set('user', profile);
   await next();
 };
 
