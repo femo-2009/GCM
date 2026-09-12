@@ -23,29 +23,32 @@ export default function GroupsView({ lang, user, groups, setGroups, onNavigate }
   // All leaders (for display and assignment)
   const [leaders, setLeaders] = useState<Leader[]>([]);
 
-    useEffect(() => {
-      const loadLeaders = async () => {
-        try {
-          const { data: { session } } = await supabase.auth.getSession();
-          const response = await fetch('/api/leaders', {
-            headers: {
-              Authorization: `Bearer ${session?.access_token || ''}`,
-            },
-          });
+  
+  useEffect(() => {
+    const loadLeaders = async () => {
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
 
-          if (!response.ok) {
-            throw new Error(`Failed to load leaders: ${response.status}`);
-          }
+        const response = await fetch('/api/leaders', {
+          headers: {
+            Authorization: `Bearer ${session?.access_token || ''}`,
+          },
+        });
 
-          setLeaders(await response.json());
-        } catch (error) {
-          console.error(error);
+        if (!response.ok) {
+          throw new Error(`Failed to load leaders: ${response.status}`);
         }
-      };
 
-      loadLeaders();
-    }, []);
+        setLeaders(await response.json());
+      } catch (error) {
+        console.error(error);
+      }
+    };
 
+    loadLeaders();
+  }, []);
   // Auto-open a specific group's detail modal when navigated from leader slider
   useEffect(() => {
     const highlightId = localStorage.getItem('highlightGroupId');
