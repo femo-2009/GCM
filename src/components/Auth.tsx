@@ -207,10 +207,16 @@ export default function Auth({ lang, setLang, onAuthSuccess }: AuthProps) {
         if (formData.password !== formData.confirmPassword) {
           throw new Error(t.passwordsDoNotMatch);
         }
-        if (formData.phone.trim().length < 7) {
-          throw new Error(t.phoneLength);
+        const egyptianPhone = formData.phone.trim().replace(/[\s().-]/g, "");
+        const normalizedPhone = egyptianPhone.startsWith("+20")
+          ? `0${egyptianPhone.slice(3)}`
+          : egyptianPhone.startsWith("20")
+            ? `0${egyptianPhone.slice(2)}`
+            : egyptianPhone;
+        if (!/^01[0125][0-9]{8}$/.test(normalizedPhone)) {
+          throw new Error(t.invalidEgyptianPhone);
         }
-        if (formData.password.length < 6) {
+        if (formData.password.length < 8) {
           throw new Error(t.passwordLength);
         }
 
@@ -219,7 +225,7 @@ export default function Auth({ lang, setLang, onAuthSuccess }: AuthProps) {
           password: formData.password,
           firstName: formData.firstName.trim(),
           lastName: formData.lastName.trim(),
-          phone: formData.phone.trim(),
+          phone: normalizedPhone,
           photo: formData.photo || "",
         });
 
