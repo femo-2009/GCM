@@ -124,6 +124,22 @@ async function saveAppData(supabase: any, value: any) {
   if (error) throw error;
 }
 
+// Canonical phone format for this Egyptian-only portal: 01XXXXXXXXX.
+function normalizeEgyptianPhone(value: unknown): string {
+  let phone = String(value ?? '').trim().replace(/[\s().-]/g, '');
+  if (phone.startsWith('+20')) phone = '0' + phone.slice(3);
+  else if (phone.startsWith('20')) phone = '0' + phone.slice(2);
+  return phone;
+}
+
+function isValidEgyptianPhone(phone: string): boolean {
+  return /^01[0125][0-9]{8}$/.test(phone);
+}
+
+function isValidEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email);
+}
+
 // Auth routes
 app.post('/api/auth/signup', async (c) => {
   try {
@@ -132,13 +148,22 @@ app.post('/api/auth/signup', async (c) => {
     const normalizedEmail = String(email).trim().toLowerCase();
     const normalizedFirstName = String(firstName).trim();
     const normalizedLastName = String(lastName).trim();
-    const normalizedPhone = String(phone).trim();
+    const normalizedPhone = normalizeEgyptianPhone(phone);
 
-    if (!normalizedEmail || !password || !normalizedFirstName || !normalizedLastName) {
-      return c.json({ error: 'Missing required signup fields' }, 400);
+    if (!normalizedEmail || !password || !normalizedFirstName || !normalizedLastName || !normalizedPhone) {
+      return c.json({ error: 'All required signup fields must be provided.' }, 400);
     }
-    if (String(password).length < 6) {
-      return c.json({ error: 'Password must be at least 6 characters long' }, 400);
+    if (!isValidEmail(normalizedEmail)) {
+      return c.json({ error: 'Please enter a valid email address.', code: 'invalid_email' }, 400);
+    }
+    if (normalizedFirstName.length < 2 || normalizedFirstName.length > 60 || normalizedLastName.length < 2 || normalizedLastName.length > 60) {
+      return c.json({ error: 'Names must be between 2 and 60 characters.', code: 'invalid_name' }, 400);
+    }
+    if (String(password).length < 8) {
+      return c.json({ error: 'Password must be at least 8 characters long.', code: 'weak_password' }, 400);
+    }
+    if (!isValidEgyptianPhone(normalizedPhone)) {
+      return c.json({ error: 'Please enter a valid Egyptian mobile number, for example 01012345678.', code: 'invalid_phone' }, 400);
     }
 
     const { data: blockedMatches } = await supabase.from('user_profiles')
