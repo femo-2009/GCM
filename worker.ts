@@ -55,6 +55,27 @@ const authenticateUser = async (c: any, next: any) => {
   await next();
 };
 
+// Authenticated users may read their own profile before admin approval.
+// Other application data remains protected by authenticateUser below.
+const authenticateAnyUser = async (c: any, next: any) => {
+  const authHeader = c.req.header('Authorization');
+  if (!authHeader?.startsWith('Bearer ')) {
+    return c.json({ error: 'Unauthorized - No token provided' }, 401);
+  }
+  const token = authHeader.substring(7);
+  const supabase = createSupabaseClient(c.env);
+  const { data: { user }, error } = await supabase.auth.getUser(token);
+  if (error || !user) {
+    return c.json({ error: 'Unauthorized - Invalid token' }, 401);
+  }
+  const profile = await ensureUserProfile(supabase, user);
+  if (!profile) {
+    return c.json({ error: 'Profile not found' }, 404);
+  }
+  c.set('user', profile);
+  await next();
+};
+
 // Ensure user profile exists
 async function ensureUserProfile(supabase: any, authUser: any, overrides: Record<string, any> = {}) {
   const metadata = authUser.user_metadata || {};
@@ -159,7 +180,7 @@ app.post('/api/auth/signup', async (c) => {
   }
 });
 
-app.get('/api/auth/profile', authenticateUser, async (c) => {
+app.get('/api/auth/profile', authenticateAnyUser, async (c) => {
   return c.json({ profile: c.get('user') });
 });
 
