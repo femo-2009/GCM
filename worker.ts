@@ -10,7 +10,15 @@ type Env = {
 
 const app = new Hono<Env>();
 
-app.use('*', cors());
+app.use(
+  '*',
+  cors({
+    origin: 'https://gcm.afraimfarag7.workers.dev',
+    allowHeaders: ['Authorization', 'Content-Type'],
+    allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    credentials: true,
+  } ),
+);
 
 // Auth middleware
 const authenticateUser = async (c: any, next: any) => {
