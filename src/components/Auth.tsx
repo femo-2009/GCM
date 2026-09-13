@@ -47,6 +47,15 @@ export default function Auth({ lang, setLang, onAuthSuccess }: AuthProps) {
   const t = translations[lang];
   const dir = lang === "ar" ? "rtl" : "ltr";
 
+  // Restore the email-verification screen after the user closes and reopens the site.
+  useEffect(() => {
+    const pendingEmail = window.localStorage.getItem("gcm_pending_verification_email");
+    if (pendingEmail) {
+      setFormData((prev) => ({ ...prev, email: pendingEmail }));
+      setAuthStatus("verifyEmail");
+    }
+  }, []);
+
   // Detect the session created after the user clicks the email confirmation link.
   useEffect(() => {
     const checkConfirmedSession = async () => {
@@ -110,6 +119,7 @@ export default function Auth({ lang, setLang, onAuthSuccess }: AuthProps) {
         throw new Error(lang === "ar" ? "انتهت صلاحية الرمز." : "The verification code has expired.");
       }
 
+      window.localStorage.removeItem("gcm_pending_verification_email");
       const authenticatedUser = await fetchProfileFromApi(accessToken);
       if (authenticatedUser.status === "approved") {
         onAuthSuccess(authenticatedUser);
@@ -161,6 +171,7 @@ export default function Auth({ lang, setLang, onAuthSuccess }: AuthProps) {
           });
         if (authError) {
           if (authError.code === "email_not_confirmed" || /email not confirmed/i.test(authError.message || "")) {
+            window.localStorage.setItem("gcm_pending_verification_email", formData.email.trim().toLowerCase());
             setAuthStatus("verifyEmail");
             return;
           }
@@ -214,6 +225,7 @@ export default function Auth({ lang, setLang, onAuthSuccess }: AuthProps) {
           photo: formData.photo || "",
         });
 
+        window.localStorage.setItem("gcm_pending_verification_email", formData.email.trim().toLowerCase());
         setAuthStatus("verifyEmail");
       }
     } catch (err: any) {
@@ -287,9 +299,10 @@ export default function Auth({ lang, setLang, onAuthSuccess }: AuthProps) {
             <div className="space-y-3 mb-5">
               <input
                 value={otp}
-                onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 8))}
                 inputMode="numeric"
                 autoComplete="one-time-code"
+                maxLength={8}
                 placeholder={lang === "ar" ? "اكتب رمز التحقق" : "Enter verification code"}
                 className="w-full text-center tracking-[0.45em] bg-slate-50 border border-slate-200 rounded-xl px-3 py-3 text-lg font-bold text-slate-900 focus:outline-none focus:border-indigo-500"
                 dir="ltr"
@@ -297,7 +310,7 @@ export default function Auth({ lang, setLang, onAuthSuccess }: AuthProps) {
               <button
                 type="button"
                 onClick={handleVerifyEmail}
-                disabled={loading || otp.trim().length < 4}
+                disabled={loading || otp.trim().length < 8}
                 className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold rounded-xl transition-colors text-sm cursor-pointer"
               >
                 {loading ? (lang === "ar" ? "جارٍ التحقق..." : "Verifying...") : (lang === "ar" ? "تأكيد البريد" : "Verify email")}
