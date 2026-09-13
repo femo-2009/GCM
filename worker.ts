@@ -217,6 +217,66 @@ app.get('/api/admin/users', authenticateUser, async (c) => {
   }
 });
 
+
+async function requireConfirmedTarget(supabase: any, targetId: string) {
+  const { data, error } = await supabase.auth.admin.listUsers({ page: 1, perPage: 1000 });
+  if (error) throw error;
+  const target = (data?.users || []).find((authUser: any) => authUser.id === targetId);
+  if (!target || !target.email_confirmed_at) throw new Error('Target user has not confirmed email');
+  return target;
+}
+
+app.post('/api/admin/users/:id/approve', authenticateUser, async (c) => {
+  try {
+    const actor = c.get('user');
+    if (actor.role !== 'super_admin' && !actor.permissions?.includes('manage_users')) {
+      return c.json({ error: 'Forbidden - Insufficient permissions' }, 403);
+    }
+    const supabase = createSupabaseClient(c.env);
+    const target = await requireConfirmedTarget(supabase, c.req.param('id'));
+    const { data, error } = await supabase.from('user_profiles').update({ status: 'approved' }).eq('id', target.id).select('*').single();
+    if (error) throw error;
+    return c.json({ user: data });
+  } catch (error: any) {
+    return c.json({ error: error?.message || 'Failed to approve user' }, 400);
+  }
+});
+
+app.post('/api/admin/users/:id/block', authenticateUser, async (c) => {
+  try {
+    const actor = c.get('user');
+    if (actor.role !== 'super_admin' && !actor.permissions?.includes('manage_users')) {
+      return c.json({ error: 'Forbidden - Insufficient permissions' }, 403);
+    }
+    const supabase = createSupabaseClient(c.env);
+    const target = await requireConfirmedTarget(supabase, c.req.param('id'));
+    const { data: targetProfile } = await supabase.from('user_profiles').select('role').eq('id', target.id).single();
+    if (targetProfile?.role === 'super_admin') return c.json({ error: 'Cannot block a super admin' }, 403);
+    const { data, error } = await supabase.from('user_profiles').update({ status: 'blocked' }).eq('id', target.id).select('*').single();
+    if (error) throw error;
+    return c.json({ user: data });
+  } catch (error: any) {
+    return c.json({ error: error?.message || 'Failed to block user' }, 400);
+  }
+});
+
+app.post('/api/admin/users/:id/permissions', authenticateUser, async (c) => {
+  try {
+    const actor = c.get('user');
+    if (actor.role !== 'super_admin') return c.json({ error: 'Forbidden - Only super admin can change roles' }, 403);
+    const supabase = createSupabaseClient(c.env);
+    const target = await requireConfirmedTarget(supabase, c.req.param('id'));
+    const body = await c.req.json();
+    const permissions = Array.isArray(body.permissions) ? body.permissions.filter((p: any) => typeof p === 'string') : [];
+    const role = body.role === 'admin' ? 'admin' : 'user';
+    const { data, error } = await supabase.from('user_profiles').update({ role, permissions }).eq('id', target.id).select('*').single();
+    if (error) throw error;
+    return c.json({ user: data });
+  } catch (error: any) {
+    return c.json({ error: error?.message || 'Failed to update permissions' }, 400);
+  }
+});
+
 // Home routes
 app.get('/api/home', authenticateUser, async (c) => {
   try {
