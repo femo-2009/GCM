@@ -100,7 +100,7 @@ export default function Auth({ lang, setLang, onAuthSuccess }: AuthProps) {
     const email = formData.email.trim().toLowerCase();
     const token = otp.trim();
     if (!email || !token) {
-      setError(lang === "ar" ? "أدخل رمز التحقق." : "Enter the verification code.");
+      setError(t.enterVerificationCode);
       return;
     }
 
@@ -116,7 +116,7 @@ export default function Auth({ lang, setLang, onAuthSuccess }: AuthProps) {
 
       const accessToken = data.session?.access_token;
       if (!accessToken) {
-        throw new Error(lang === "ar" ? "انتهت صلاحية الرمز." : "The verification code has expired.");
+        throw new Error(t.verificationExpired);
       }
 
       window.localStorage.removeItem("gcm_pending_verification_email");
@@ -131,7 +131,7 @@ export default function Auth({ lang, setLang, onAuthSuccess }: AuthProps) {
         setAuthStatus("pending");
       }
     } catch (err: any) {
-      setError(err.message || (lang === "ar" ? "رمز التحقق غير صحيح." : "Invalid verification code."));
+      setError(err.message || (t.invalidVerificationCode));
     } finally {
       setLoading(false);
     }
@@ -148,9 +148,9 @@ export default function Auth({ lang, setLang, onAuthSuccess }: AuthProps) {
         email,
       });
       if (resendError) throw resendError;
-      setError(lang === "ar" ? "تم إرسال رمز جديد إلى بريدك الإلكتروني." : "A new verification code was sent to your email.");
+      setError(t.verificationCodeSent);
     } catch (err: any) {
-      setError(err.message || (lang === "ar" ? "تعذر إعادة إرسال الرمز." : "Could not resend the code."));
+      setError(err.message || (t.resendCodeError));
     } finally {
       setLoading(false);
     }
@@ -181,9 +181,7 @@ export default function Auth({ lang, setLang, onAuthSuccess }: AuthProps) {
         const accessToken = authData.session?.access_token;
         if (!accessToken) {
           throw new Error(
-            lang === "ar"
-              ? "تعذّر إتمام تسجيل الدخول."
-              : "Could not complete sign in.",
+            t.loginError,
           );
         }
 
@@ -269,23 +267,15 @@ export default function Auth({ lang, setLang, onAuthSuccess }: AuthProps) {
 
           <h2 className="text-2xl font-extrabold text-slate-900 mb-3">
             {authStatus === "verifyEmail"
-              ? lang === "ar"
-                ? "يرجى تأكيد بريدك الإلكتروني"
-                : "Please confirm your email"
+              ? t.verifyEmailTitle
               : authStatus === "pending"
-                ? lang === "ar"
-                  ? "حسابك قيد المراجعة"
-                  : "Account Pending Review"
-                : lang === "ar"
-                  ? "حسابك محظور"
-                  : "Account Blocked"}
+                ? t.pendingTitle
+                : t.blockedTitleAuth}
           </h2>
 
           <p className="text-slate-500 text-sm leading-relaxed mb-8">
             {authStatus === "verifyEmail"
-              ? lang === "ar"
-                ? "افتح Gmail أو تطبيق البريد، وابحث عن رسالة بعنوان Confirm your email address، ثم اضغط رابط التأكيد. بعد ذلك ارجع إلى الموقع؛ سيتحقق الموقع تلقائيًا من تأكيد بريدك، ثم ينقلك إلى صفحة انتظار موافقة المسؤول."
-                : "Open Gmail or your email app, find the message titled Confirm your email address, and click the confirmation link. Then return to this site; it will verify your email automatically and move you to the admin approval waiting page."
+              ? t.verifyEmailMessage
               : authStatus === "pending"
                 ? lang === "ar"
                   ? t.pendingApprovalMsg
@@ -303,7 +293,7 @@ export default function Auth({ lang, setLang, onAuthSuccess }: AuthProps) {
                 inputMode="numeric"
                 autoComplete="one-time-code"
                 maxLength={8}
-                placeholder={lang === "ar" ? "اكتب رمز التحقق" : "Enter verification code"}
+                placeholder={t.verifyCodePlaceholder}
                 className="w-full text-center tracking-[0.45em] bg-slate-50 border border-slate-200 rounded-xl px-3 py-3 text-lg font-bold text-slate-900 focus:outline-none focus:border-indigo-500"
                 dir="ltr"
               />
@@ -313,7 +303,7 @@ export default function Auth({ lang, setLang, onAuthSuccess }: AuthProps) {
                 disabled={loading || otp.trim().length < 8}
                 className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold rounded-xl transition-colors text-sm cursor-pointer"
               >
-                {loading ? (lang === "ar" ? "جارٍ التحقق..." : "Verifying...") : (lang === "ar" ? "تأكيد البريد" : "Verify email")}
+                {loading ? (t.verifying) : (t.verifyCode)}
               </button>
               <button
                 type="button"
@@ -321,7 +311,7 @@ export default function Auth({ lang, setLang, onAuthSuccess }: AuthProps) {
                 disabled={loading}
                 className="w-full py-2 text-indigo-600 hover:text-indigo-800 disabled:opacity-50 font-semibold text-sm cursor-pointer"
               >
-                {lang === "ar" ? "إعادة إرسال الرمز" : "Resend code"}
+                {t.resendCode}
               </button>
             </div>
           )}
@@ -344,7 +334,7 @@ export default function Auth({ lang, setLang, onAuthSuccess }: AuthProps) {
             }}
             className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition-colors text-sm cursor-pointer"
           >
-            {lang === "ar" ? "العودة لصفحة الدخول" : "Back to Login"}
+            {t.backToLogin}
           </button>
         </motion.div>
       </div>
@@ -367,7 +357,7 @@ export default function Auth({ lang, setLang, onAuthSuccess }: AuthProps) {
         className="absolute top-5 right-5 flex items-center gap-1.5 px-3.5 py-2 bg-white border border-slate-200 rounded-full text-xs font-semibold text-slate-700 shadow-sm hover:shadow-md transition-all cursor-pointer"
       >
         <Globe className="w-3.5 h-3.5 text-indigo-600" />
-        <span>{lang === "ar" ? "English" : "العربية"}</span>
+        <span>{lang === "ar" ? t.englishLanguage : t.arabicLanguage}</span>
       </button>
 
       <motion.div
@@ -462,7 +452,7 @@ export default function Auth({ lang, setLang, onAuthSuccess }: AuthProps) {
                         )}
                         <label className="px-3 py-2 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-xs font-semibold text-slate-700 rounded-xl cursor-pointer">
                           <span>
-                            {lang === "ar" ? "اختر صورة" : "Choose Photo"}
+                            {t.choosePhoto}
                           </span>
                           <input
                             type="file"
