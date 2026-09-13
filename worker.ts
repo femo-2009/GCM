@@ -636,14 +636,50 @@ app.get('/api/videos/stream/:id', authenticateUser, async (c) => {
 app.get('*', async (c) => {
   const req = c.req.raw;
   const env = c.env as any;
+
+  const addSecurityHeaders = (response: Response) => {
+    const securedResponse = new Response(response.body, response);
+
+    securedResponse.headers.set(
+      'X-Content-Type-Options',
+      'nosniff',
+    );
+    securedResponse.headers.set(
+      'X-Frame-Options',
+      'DENY',
+    );
+    securedResponse.headers.set(
+      'Referrer-Policy',
+      'strict-origin-when-cross-origin',
+    );
+    securedResponse.headers.set(
+      'Permissions-Policy',
+      'camera=(), microphone=(), geolocation=()',
+    );
+    securedResponse.headers.set(
+      'Strict-Transport-Security',
+      'max-age=31536000; includeSubDomains',
+    );
+
+    return securedResponse;
+  };
+
   try {
     const response = await env.ASSETS.fetch(req);
-    if (response.status < 400) return response;
+    if (response.status < 400) {
+      return addSecurityHeaders(response);
+    }
   } catch {}
+
   try {
     const url = new URL(req.url);
     url.pathname = '/index.html';
-    return await env.ASSETS.fetch(new Request(url.toString(), req));
+
+    const response = await env.ASSETS.fetch(
+      new Request(url.toString(), req),
+    );
+
+    return addSecurityHeaders(response);
   } catch {
     return c.text('Not Found', 404);
   }
