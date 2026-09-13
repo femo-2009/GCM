@@ -209,8 +209,12 @@ app.post('/api/auth/signup', async (c) => {
         code: createUserError?.code,
       });
 
-      const statusCode = /already|exists|registered/i.test(message) ? 409 : 400;
-      return c.json({ error: message }, statusCode);
+      const emailExists = /already|exists|registered/i.test(message);
+      const statusCode = emailExists ? 409 : 400;
+      return c.json({
+        error: emailExists ? 'This email address is already registered.' : 'Unable to create account.',
+        code: emailExists ? 'email_exists' : 'signup_failed',
+      }, statusCode);
     }
 
     try {
