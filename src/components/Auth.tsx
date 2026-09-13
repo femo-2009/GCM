@@ -204,6 +204,12 @@ export default function Auth({ lang, setLang, onAuthSuccess }: AuthProps) {
         if (!formData.firstName.trim() || !formData.lastName.trim()) {
           throw new Error(t.requiredField);
         }
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(formData.email.trim())) {
+          throw new Error(t.invalidEmail);
+        }
+        if (formData.firstName.trim().length < 2 || formData.firstName.trim().length > 60 || formData.lastName.trim().length < 2 || formData.lastName.trim().length > 60) {
+          throw new Error(t.invalidName);
+        }
         if (formData.password !== formData.confirmPassword) {
           throw new Error(t.passwordsDoNotMatch);
         }
@@ -235,8 +241,22 @@ export default function Auth({ lang, setLang, onAuthSuccess }: AuthProps) {
     } catch (err: any) {
       if (err.code === "blocked") {
         setAuthStatus("blocked");
+      } else if (err.code === "invalid_phone") {
+        setError(t.invalidEgyptianPhone);
+      } else if (err.code === "invalid_email") {
+        setError(t.invalidEmail);
+      } else if (err.code === "email_exists") {
+        setError(t.emailAlreadyUsed);
+      } else if (err.code === "phone_exists") {
+        setError(t.phoneAlreadyUsed);
+      } else if (err.code === "invalid_name") {
+        setError(t.invalidName);
+      } else if (err.code === "weak_password") {
+        setError(t.weakPassword);
+      } else if (err.code === "signup_failed") {
+        setError(t.signupFailed);
       } else {
-        setError(err.message);
+        setError(err.message || t.unexpectedError);
       }
     } finally {
       setLoading(false);
