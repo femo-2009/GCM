@@ -19,6 +19,21 @@ app.use(
     credentials: true,
   }),
 );
+app.use('*', async (c, next) => {
+  await next();
+
+  c.header('X-Content-Type-Options', 'nosniff');
+  c.header('X-Frame-Options', 'DENY');
+  c.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+  c.header(
+    'Permissions-Policy',
+    'camera=(), microphone=(), geolocation=()',
+  );
+  c.header(
+    'Strict-Transport-Security',
+    'max-age=31536000; includeSubDomains',
+  );
+});
 
 // Auth middleware
 const authenticateUser = async (c: any, next: any) => {
