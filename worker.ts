@@ -184,6 +184,39 @@ app.get('/api/auth/profile', authenticateAnyUser, async (c) => {
   return c.json({ profile: c.get('user') });
 });
 
+// Admin-only user directory: return only users whose Supabase email is confirmed.
+app.get('/api/admin/users', authenticateUser, async (c) => {
+  const currentUser = c.get('user');
+  if (currentUser.role !== 'super_admin' && !currentUser.permissions?.includes('manage_users')) {
+    return c.json({ error: 'Forbidden - Insufficient permissions' }, 403);
+  }
+
+  try {
+    const supabase = createSupabaseClient(c.env);
+    const { data: authPage, error: authError } = await supabase.auth.admin.listUsers({
+      page: 1,
+      perPage: 1000,
+    });
+    if (authError) throw authError;
+
+    const confirmedIds = new Set(
+      (authPage?.users || [])
+        .filter((authUser: any) => Boolean(authUser.email_confirmed_at))
+        .map((authUser: any) => authUser.id),
+    );
+
+    const { data: profiles, error: profileError } = await supabase
+      .from('user_profiles')
+      .select('*')
+      .in('id', Array.from(confirmedIds));
+    if (profileError) throw profileError;
+
+    return c.json({ users: profiles || [] });
+  } catch (error: any) {
+    return c.json({ error: error?.message || 'Failed to load users' }, 500);
+  }
+});
+
 // Home routes
 app.get('/api/home', authenticateUser, async (c) => {
   try {
