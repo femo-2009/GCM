@@ -27,6 +27,7 @@ export default function Auth({ lang, setLang, onAuthSuccess }: AuthProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [otp, setOtp] = useState("");
   const [authStatus, setAuthStatus] = useState<
     "idle" | "pending" | "blocked" | "registered" | "verifyEmail"
   >("idle");
@@ -86,6 +87,65 @@ export default function Auth({ lang, setLang, onAuthSuccess }: AuthProps) {
     setError(null);
   };
 
+  const handleVerifyEmail = async () => {
+    const email = formData.email.trim().toLowerCase();
+    const token = otp.trim();
+    if (!email || !token) {
+      setError(lang === "ar" ? "أدخل رمز التحقق." : "Enter the verification code.");
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    try {
+      const { data, error: verifyError } = await supabase.auth.verifyOtp({
+        email,
+        token,
+        type: "email",
+      });
+      if (verifyError) throw verifyError;
+
+      const accessToken = data.session?.access_token;
+      if (!accessToken) {
+        throw new Error(lang === "ar" ? "انتهت صلاحية الرمز." : "The verification code has expired.");
+      }
+
+      const authenticatedUser = await fetchProfileFromApi(accessToken);
+      if (authenticatedUser.status === "approved") {
+        onAuthSuccess(authenticatedUser);
+      } else if (authenticatedUser.status === "blocked") {
+        await supabase.auth.signOut();
+        setAuthStatus("blocked");
+      } else {
+        await supabase.auth.signOut();
+        setAuthStatus("pending");
+      }
+    } catch (err: any) {
+      setError(err.message || (lang === "ar" ? "رمز التحقق غير صحيح." : "Invalid verification code."));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendEmail = async () => {
+    const email = formData.email.trim().toLowerCase();
+    if (!email) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const { error: resendError } = await supabase.auth.resend({
+        type: "signup",
+        email,
+      });
+      if (resendError) throw resendError;
+      setError(lang === "ar" ? "تم إرسال رمز جديد إلى بريدك الإلكتروني." : "A new verification code was sent to your email.");
+    } catch (err: any) {
+      setError(err.message || (lang === "ar" ? "تعذر إعادة إرسال الرمز." : "Could not resend the code."));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -99,7 +159,13 @@ export default function Auth({ lang, setLang, onAuthSuccess }: AuthProps) {
             email: formData.email.trim(),
             password: formData.password,
           });
-        if (authError) throw authError;
+        if (authError) {
+          if (authError.code === "email_not_confirmed" || /email not confirmed/i.test(authError.message || "")) {
+            setAuthStatus("verifyEmail");
+            return;
+          }
+          throw authError;
+        }
 
         const accessToken = authData.session?.access_token;
         if (!accessToken) {
@@ -217,6 +283,36 @@ export default function Auth({ lang, setLang, onAuthSuccess }: AuthProps) {
                   : t.blockedMsg}
           </p>
 
+          {isVerifyEmail && (
+            <div className="space-y-3 mb-5">
+              <input
+                value={otp}
+                onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                placeholder={lang === "ar" ? "اكتب رمز التحقق" : "Enter verification code"}
+                className="w-full text-center tracking-[0.45em] bg-slate-50 border border-slate-200 rounded-xl px-3 py-3 text-lg font-bold text-slate-900 focus:outline-none focus:border-indigo-500"
+                dir="ltr"
+              />
+              <button
+                type="button"
+                onClick={handleVerifyEmail}
+                disabled={loading || otp.trim().length < 4}
+                className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold rounded-xl transition-colors text-sm cursor-pointer"
+              >
+                {loading ? (lang === "ar" ? "جارٍ التحقق..." : "Verifying...") : (lang === "ar" ? "تأكيد البريد" : "Verify email")}
+              </button>
+              <button
+                type="button"
+                onClick={handleResendEmail}
+                disabled={loading}
+                className="w-full py-2 text-indigo-600 hover:text-indigo-800 disabled:opacity-50 font-semibold text-sm cursor-pointer"
+              >
+                {lang === "ar" ? "إعادة إرسال الرمز" : "Resend code"}
+              </button>
+            </div>
+          )}
+
           <button
             onClick={() => {
               setAuthStatus("idle");
@@ -231,6 +327,7 @@ export default function Auth({ lang, setLang, onAuthSuccess }: AuthProps) {
                 photo: "",
               });
               setPhotoPreview("");
+              setOtp("");
             }}
             className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition-colors text-sm cursor-pointer"
           >
