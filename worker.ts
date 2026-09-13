@@ -139,7 +139,15 @@ app.post('/api/auth/signup', async (c) => {
       },
     });
     if (createUserError || !createdUserData?.user) {
-      const message = createUserError?.message || 'Failed to create account';
+      const message =
+        createUserError?.message && createUserError.message !== '{}'
+      ? createUserError.message
+      : JSON.stringify({
+        name: createUserError?.name,
+        status: createUserError?.status,
+        code: createUserError?.code,
+      });
+
       const statusCode = /already|exists|registered/i.test(message) ? 409 : 400;
       return c.json({ error: message }, statusCode);
     }
