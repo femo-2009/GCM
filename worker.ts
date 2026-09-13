@@ -127,9 +127,16 @@ app.post('/api/auth/signup', async (c) => {
       return c.json({ error: 'This email or phone number has been blocked by the administrator.', code: 'blocked' }, 403);
     }
 
-    const { data: createdUserData, error: createUserError } = await supabase.auth.admin.createUser({
-      email: normalizedEmail, password: String(password), email_confirm: false,
-      user_metadata: { first_name: normalizedFirstName, last_name: normalizedLastName, phone: normalizedPhone },
+    const { data: createdUserData, error: createUserError } = await supabase.auth.signUp({
+      email: normalizedEmail,
+      password: String(password),
+      options: {
+        data: {
+          first_name: normalizedFirstName,
+          last_name: normalizedLastName,
+          phone: normalizedPhone,
+        },
+      },
     });
     if (createUserError || !createdUserData?.user) {
       const message = createUserError?.message || 'Failed to create account';
