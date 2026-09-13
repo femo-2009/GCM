@@ -49,6 +49,35 @@ export default function GroupsView({ lang, user, groups, setGroups, onNavigate }
 
     loadLeaders();
   }, []);
+
+  // Load groups when the Groups page opens
+  useEffect(() => {
+    const loadGroups = async () => {
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        const response = await fetch('/api/home', {
+          headers: {
+            Authorization: `Bearer ${session?.access_token || ''}`,
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to load groups: ${response.status}`);
+        }
+
+        const data = await response.json();
+        setGroups(data.groups || []);
+      } catch (error) {
+        console.error('Failed to load groups:', error);
+      }
+    };
+
+    loadGroups();
+  }, [setGroups]);
+
   // Auto-open a specific group's detail modal when navigated from leader slider
   useEffect(() => {
     const highlightId = localStorage.getItem('highlightGroupId');
@@ -141,7 +170,6 @@ export default function GroupsView({ lang, user, groups, setGroups, onNavigate }
         }
 
         // Refresh groups
-
         const { data: { session: refreshSession } } =
           await supabase.auth.getSession();
 
@@ -223,10 +251,23 @@ export default function GroupsView({ lang, user, groups, setGroups, onNavigate }
           throw new Error(errorMessage);
         }
         
-        // Refresh
-        const freshRes = await fetch('/api/home');
+        // Refresh groups after delete
+        const {
+          data: { session: refreshSession },
+        } = await supabase.auth.getSession();
+
+        const freshRes = await fetch('/api/home', {
+          headers: {
+            Authorization: `Bearer ${refreshSession?.access_token || ''}`,
+          },
+        });
+
+        if (!freshRes.ok) {
+          throw new Error(`Failed to refresh groups: ${freshRes.status}`);
+        }
+
         const freshData = await freshRes.json();
-        setGroups(freshData.groups);
+        setGroups(freshData.groups || []);
         alert(lang === 'ar' ? 'تم حذف المجموعة بنجاح' : 'Group deleted successfully');
       } catch (err: any) {
         console.error(err);
