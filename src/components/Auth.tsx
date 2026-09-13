@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   ShieldAlert,
@@ -28,7 +28,7 @@ export default function Auth({ lang, setLang, onAuthSuccess }: AuthProps) {
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [authStatus, setAuthStatus] = useState<
-    "idle" | "pending" | "blocked" | "registered"
+    "idle" | "pending" | "blocked" | "registered" | "verifyEmail"
   >("idle");
 
   const [formData, setFormData] = useState({
@@ -45,6 +45,41 @@ export default function Auth({ lang, setLang, onAuthSuccess }: AuthProps) {
 
   const t = translations[lang];
   const dir = lang === "ar" ? "rtl" : "ltr";
+
+  // Detect the session created after the user clicks the email confirmation link.
+  useEffect(() => {
+    const checkConfirmedSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.email_confirmed_at) return;
+
+      try {
+        const authenticatedUser = await fetchProfileFromApi(session.access_token);
+        if (authenticatedUser.status === "approved") {
+          onAuthSuccess(authenticatedUser);
+        } else if (authenticatedUser.status === "blocked") {
+          await supabase.auth.signOut();
+          setAuthStatus("blocked");
+        } else {
+          await supabase.auth.signOut();
+          setAuthStatus("pending");
+        }
+      } catch (error) {
+        console.error("Failed to verify confirmed email session:", error);
+      }
+    };
+
+    checkConfirmedSession();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        if (event === "SIGNED_IN" && session?.user?.email_confirmed_at) {
+          window.setTimeout(checkConfirmedSession, 0);
+        }
+      },
+    );
+
+    return () => subscription.unsubscribe();
+  }, [onAuthSuccess]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -113,7 +148,7 @@ export default function Auth({ lang, setLang, onAuthSuccess }: AuthProps) {
           photo: formData.photo || "",
         });
 
-        setAuthStatus("registered");
+        setAuthStatus("verifyEmail");
       }
     } catch (err: any) {
       if (err.code === "blocked") {
@@ -126,9 +161,10 @@ export default function Auth({ lang, setLang, onAuthSuccess }: AuthProps) {
     }
   };
 
-  // --- STATUS SCREENS (pending / blocked / registered) ---
+  // --- STATUS SCREENS (email verification / pending / blocked) ---
   if (authStatus !== "idle") {
-    const isPending = authStatus === "pending" || authStatus === "registered";
+    const isPending = authStatus === "pending";
+    const isVerifyEmail = authStatus === "verifyEmail";
     return (
       <div
         className="min-h-screen flex items-center justify-center bg-slate-50 p-6"
@@ -141,21 +177,23 @@ export default function Auth({ lang, setLang, onAuthSuccess }: AuthProps) {
         >
           <div
             className={`w-20 h-20 mx-auto rounded-full flex items-center justify-center mb-5 ${
-              isPending
-                ? "bg-amber-50 border-2 border-amber-200"
-                : "bg-red-50 border-2 border-red-200"
+              isVerifyEmail
+                ? "bg-indigo-50 border-2 border-indigo-200"
+                : isPending
+                  ? "bg-amber-50 border-2 border-amber-200"
+                  : "bg-red-50 border-2 border-red-200"
             }`}
           >
             <ShieldAlert
-              className={`w-10 h-10 ${isPending ? "text-amber-500" : "text-red-500"}`}
+              className={`w-10 h-10 ${isVerifyEmail ? "text-indigo-500" : isPending ? "text-amber-500" : "text-red-500"}`}
             />
           </div>
 
           <h2 className="text-2xl font-extrabold text-slate-900 mb-3">
-            {authStatus === "registered"
+            {authStatus === "verifyEmail"
               ? lang === "ar"
-                ? "تم التسجيل بنجاح!"
-                : "Registration Successful!"
+                ? "يرجى تأكيد بريدك الإلكتروني"
+                : "Please confirm your email"
               : authStatus === "pending"
                 ? lang === "ar"
                   ? "حسابك قيد المراجعة"
@@ -166,10 +204,10 @@ export default function Auth({ lang, setLang, onAuthSuccess }: AuthProps) {
           </h2>
 
           <p className="text-slate-500 text-sm leading-relaxed mb-8">
-            {authStatus === "registered"
+            {authStatus === "verifyEmail"
               ? lang === "ar"
-                ? "تم إنشاء حسابك بنجاح. يُرجى انتظار موافقة المسؤول لتفعيل الحساب."
-                : "Your account has been created. Please wait for admin approval to activate it."
+                ? "افتح Gmail أو تطبيق البريد، وابحث عن رسالة بعنوان Confirm your email address، ثم اضغط رابط التأكيد. بعد ذلك ارجع إلى الموقع؛ سيتحقق الموقع تلقائيًا من تأكيد بريدك، ثم ينقلك إلى صفحة انتظار موافقة المسؤول."
+                : "Open Gmail or your email app, find the message titled Confirm your email address, and click the confirmation link. Then return to this site; it will verify your email automatically and move you to the admin approval waiting page."
               : authStatus === "pending"
                 ? lang === "ar"
                   ? t.pendingApprovalMsg
