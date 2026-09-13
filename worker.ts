@@ -17,7 +17,7 @@ app.use(
     allowHeaders: ['Authorization', 'Content-Type'],
     allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     credentials: true,
-  } ),
+  }),
 );
 
 // Auth middleware
