@@ -59,13 +59,26 @@ export default function AdminPanelView({ lang, user }: AdminPanelViewProps) {
       return;
     }
     setLoading(true);
-    const { data, error } = await supabase.from("user_profiles").select("*");
-    if (data) {
-      const mapped = data.map(mapProfileToUser);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("No active session");
+
+      const response = await fetch("/api/admin/users", {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload?.error || "Failed to load users");
+
+      const mapped = (payload.users || []).map(mapProfileToUser);
       setPendingUsers(mapped.filter((u) => u.status === "pending"));
       setApprovedUsers(mapped.filter((u) => u.status === "approved"));
+    } catch (error) {
+      console.error("Failed to load confirmed users:", error);
+      setPendingUsers([]);
+      setApprovedUsers([]);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   useEffect(() => {
