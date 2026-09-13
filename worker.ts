@@ -148,6 +148,21 @@ app.post('/api/auth/signup', async (c) => {
       return c.json({ error: 'This email or phone number has been blocked by the administrator.', code: 'blocked' }, 403);
     }
 
+    if (normalizedPhone) {
+      const { data: phoneMatches, error: phoneLookupError } = await supabase
+        .from('user_profiles')
+        .select('id')
+        .eq('phone', normalizedPhone)
+        .limit(1);
+      if (phoneLookupError) throw phoneLookupError;
+      if (phoneMatches && phoneMatches.length > 0) {
+        return c.json({
+          error: 'This phone number is already registered. Please use a different number.',
+          code: 'phone_exists',
+        }, 409);
+      }
+    }
+
     const { data: createdUserData, error: createUserError } = await supabase.auth.signUp({
       email: normalizedEmail,
       password: String(password),
@@ -173,8 +188,23 @@ app.post('/api/auth/signup', async (c) => {
       return c.json({ error: message }, statusCode);
     }
 
-    const profile = await ensureUserProfile(supabase, createdUserData.user, { photo: photo || null, phone: normalizedPhone });
-    return c.json({ profile }, 201);
+    try {
+      const profile = await ensureUserProfile(supabase, createdUserData.user, { photo: photo || null, phone: normalizedPhone });
+      if (!profile) throw new Error('Failed to create user profile');
+      return c.json({ profile }, 201);
+    } catch (profileError: any) {
+      // Avoid leaving an Auth account without its profile when the unique phone
+      // index rejects a concurrent duplicate signup.
+      await supabase.auth.admin.deleteUser(createdUserData.user.id);
+      const message = String(profileError?.message || 'Failed to create user profile');
+      if (/duplicate|unique|user_profiles_phone_unique_idx/i.test(message)) {
+        return c.json({
+          error: 'This phone number is already registered. Please use a different number.',
+          code: 'phone_exists',
+        }, 409);
+      }
+      throw profileError;
+    }
   } catch (err: any) {
     return c.json({ error: err.message || 'Failed to create account' }, 500);
   }
