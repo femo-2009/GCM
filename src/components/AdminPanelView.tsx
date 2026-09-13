@@ -85,34 +85,38 @@ export default function AdminPanelView({ lang, user }: AdminPanelViewProps) {
     fetchUsers();
   }, [user]);
 
+  const adminRequest = async (path: string, body?: unknown) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) throw new Error("No active session");
+    const response = await fetch(path, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload?.error || "Admin action failed");
+    return payload;
+  };
+
   const handleApprove = async (id: string) => {
     await withLoading(async () => {
-      await supabase
-        .from("user_profiles")
-        .update({ status: "approved" })
-        .eq("id", id);
-      fetchUsers();
+      await adminRequest(`/api/admin/users/${id}/approve`);
+      await fetchUsers();
     });
   };
 
   const handleBlockPending = async (id: string) => {
     await withLoading(async () => {
-      await supabase
-        .from("user_profiles")
-        .update({ status: "blocked" })
-        .eq("id", id);
-      fetchUsers();
+      await adminRequest(`/api/admin/users/${id}/block`);
+      await fetchUsers();
     });
   };
 
   const handleRemoveAndBlockApproved = async (id: string) => {
     if (!confirm(lang === "ar" ? "هل أنت متأكد؟" : "Are you sure?")) return;
     await withLoading(async () => {
-      await supabase
-        .from("user_profiles")
-        .update({ status: "blocked" })
-        .eq("id", id);
-      fetchUsers();
+      await adminRequest(`/api/admin/users/${id}/block`);
+      await fetchUsers();
       if (selectedUser?.id === id) setSelectedUser(null);
     });
   };
@@ -134,11 +138,8 @@ export default function AdminPanelView({ lang, user }: AdminPanelViewProps) {
       if (permEditLibrary) permissions.push("edit_library");
       if (permEditGroups) permissions.push("edit_groups");
 
-      await supabase
-        .from("user_profiles")
-        .update({ role: "admin", permissions })
-        .eq("id", assigningAdminUser.id);
-      fetchUsers();
+      await adminRequest(`/api/admin/users/${assigningAdminUser.id}/permissions`, { role: "admin", permissions });
+      await fetchUsers();
       setAssigningAdminUser(null);
       alert(t.assignedAdminPerms);
     });
@@ -147,11 +148,8 @@ export default function AdminPanelView({ lang, user }: AdminPanelViewProps) {
   const handleDemoteToUser = async (uId: string) => {
     if (!confirm(lang === "ar" ? "هل أنت متأكد؟" : "Are you sure?")) return;
     await withLoading(async () => {
-      await supabase
-        .from("user_profiles")
-        .update({ role: "user", permissions: [] })
-        .eq("id", uId);
-      fetchUsers();
+      await adminRequest(`/api/admin/users/${uId}/permissions`, { role: "user", permissions: [] });
+      await fetchUsers();
       if (selectedUser?.id === uId) setSelectedUser(null);
     });
   };
