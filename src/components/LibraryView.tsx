@@ -52,6 +52,7 @@ export default function LibraryView({ lang, user }: LibraryViewProps) {
 
   // View Item Modal State
   const [selectedItem, setSelectedItem] = useState<LibraryItem | null>(null);
+  const [mediaUrls, setMediaUrls] = useState<Record<string, string>>({});
 
   // Custom Video Player States
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -76,8 +77,38 @@ export default function LibraryView({ lang, user }: LibraryViewProps) {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
-        const data = await res.json();
+        const data: LibraryItem[] = await res.json();
         setItems(data);
+
+        const privateMedia = data.filter(
+          (item) =>
+            (item.type === 'photo') &&
+            Boolean(item.url) &&
+            item.url!.startsWith('/api/videos/stream/'),
+        );
+
+        const loadedMedia = await Promise.all(
+          privateMedia.map(async (item) => {
+            try {
+              const mediaResponse = await fetch(item.url!, {
+                headers: { Authorization: `Bearer ${token}` },
+              });
+              if (!mediaResponse.ok) return null;
+              const blob = await mediaResponse.blob();
+              return [item.id, URL.createObjectURL(blob)] as const;
+            } catch {
+              return null;
+            }
+          }),
+        );
+
+        setMediaUrls((current) => {
+          const next = { ...current };
+          loadedMedia.forEach((entry) => {
+            if (entry) next[entry[0]] = entry[1];
+          });
+          return next;
+        });
       }
     } catch (err) {
       console.error(err);
@@ -88,7 +119,42 @@ export default function LibraryView({ lang, user }: LibraryViewProps) {
 
   useEffect(() => {
     fetchLibrary();
+
+    return () => {
+      // Object URLs are released when the component is unmounted.
+      Object.values(mediaUrls).forEach((url) => URL.revokeObjectURL(url));
+    };
   }, []);
+
+  useEffect(() => {
+    const loadSelectedPrivateVideo = async () => {
+      if (
+        !selectedItem ||
+        selectedItem.type !== 'video' ||
+        !selectedItem.url?.startsWith('/api/videos/stream/') ||
+        mediaUrls[selectedItem.id]
+      ) {
+        return;
+      }
+
+      const token = (await supabase.auth.getSession()).data.session?.access_token;
+      if (!token) return;
+
+      try {
+        const response = await fetch(selectedItem.url, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!response.ok) return;
+        const blob = await response.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        setMediaUrls((current) => ({ ...current, [selectedItem.id]: objectUrl }));
+      } catch (error) {
+        console.error('Failed to load private video:', error);
+      }
+    };
+
+    loadSelectedPrivateVideo();
+  }, [selectedItem, mediaUrls]);
 
   // Sync video status
   useEffect(() => {
@@ -619,7 +685,7 @@ export default function LibraryView({ lang, user }: LibraryViewProps) {
                 {item.type === "photo" && item.url ? (
                   <div className="h-44 relative bg-slate-100 overflow-hidden">
                     <img
-                      src={item.url}
+                      src={mediaUrls[item.id] || item.url}
                       alt={item.title}
                       referrerPolicy="no-referrer"
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
@@ -953,7 +1019,7 @@ export default function LibraryView({ lang, user }: LibraryViewProps) {
                 {selectedItem.type === "photo" && selectedItem.url && (
                   <div className="w-full max-h-[70vh] aspect-video rounded-2xl overflow-hidden bg-slate-950 border border-slate-800 flex items-center justify-center">
                     <img
-                      src={selectedItem.url}
+                      src={mediaUrls[selectedItem.id] || selectedItem.url}
                       alt={selectedItem.title}
                       referrerPolicy="no-referrer"
                       className="w-full h-full object-contain"
@@ -963,7 +1029,7 @@ export default function LibraryView({ lang, user }: LibraryViewProps) {
 
                 {selectedItem.type === "video" && selectedItem.url && (
                   (() => {
-                    const url = selectedItem.url;
+                    const url = mediaUrls[selectedItem.id] || selectedItem.url;
                     const isYoutube = /(?:youtube\.com|youtu\.be)/.test(url);
                     const isFacebook = /(?:facebook\.com|fb\.watch)/.test(url);
 
