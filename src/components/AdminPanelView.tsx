@@ -187,8 +187,8 @@ export default function AdminPanelView({ lang, user }: AdminPanelViewProps) {
       style={{ direction: lang === "ar" ? "rtl" : "ltr" }}
     >
       <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-[11px] text-amber-950 leading-relaxed">
-        <p className="font-bold mb-1">{lang === 'ar' ? 'حدود حماية البيانات' : 'Data protection limits'}</p>
-        <p>{lang === 'ar' ? 'الصور الشخصية والمرفوعة: حتى 5 MB وبأنواع JPG أو PNG أو WebP. الخطة الشخصية حتى 10,000 حرف. حد المجموعات 20، والتلاميذ 50، وأعضاء المجموعة 100.' : 'Profile and uploaded images: up to 5 MB in JPG, PNG, or WebP. Personal plan up to 10,000 characters. Limits: 20 groups, 50 disciples, and 100 members per group.'}</p>
+        <p className="font-bold mb-1">{t.dataProtectionLimitsTitle}</p>
+        <p>{t.adminDataProtectionLimits}</p>
       </div>
 
       {/* Page Title */}
