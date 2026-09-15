@@ -11,7 +11,36 @@
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- ============================================================
--- 2. APP_DATA TABLE
+-- 2. SECURITY RATE LIMITS TABLE
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS public.security_rate_limits (
+  rate_key text PRIMARY KEY,
+  window_started_at timestamptz NOT NULL DEFAULT now(),
+  request_count integer NOT NULL DEFAULT 0,
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.security_rate_limits ENABLE ROW LEVEL SECURITY;
+
+REVOKE ALL PRIVILEGES
+ON TABLE public.security_rate_limits
+FROM PUBLIC;
+
+REVOKE ALL PRIVILEGES
+ON TABLE public.security_rate_limits
+FROM anon;
+
+REVOKE ALL PRIVILEGES
+ON TABLE public.security_rate_limits
+FROM authenticated;
+
+GRANT ALL PRIVILEGES
+ON TABLE public.security_rate_limits
+TO service_role;
+
+-- ============================================================
+-- 3. APP_DATA TABLE
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS public.app_data (
@@ -46,7 +75,98 @@ CREATE TABLE IF NOT EXISTS public.user_profiles (
 );
 
 -- ============================================================
--- 4. APPROVED USER CHECK FUNCTION
+-- 5. RATE LIMIT FUNCTION
+-- ============================================================
+
+CREATE OR REPLACE FUNCTION public.check_security_rate_limit(
+  p_rate_key text,
+  p_limit integer,
+  p_window_seconds integer
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $function$
+DECLARE
+  current_count integer;
+  current_window timestamptz;
+  allowed boolean;
+BEGIN
+  IF p_rate_key IS NULL
+     OR length(p_rate_key) < 3
+     OR length(p_rate_key) > 200
+     OR p_limit < 1
+     OR p_window_seconds < 1 THEN
+    RETURN jsonb_build_object(
+      'allowed', false,
+      'remaining', 0
+    );
+  END IF;
+
+  INSERT INTO public.security_rate_limits (
+    rate_key,
+    window_started_at,
+    request_count,
+    updated_at
+  )
+  VALUES (
+    p_rate_key,
+    now(),
+    1,
+    now()
+  )
+  ON CONFLICT (rate_key)
+  DO UPDATE SET
+    request_count = CASE
+      WHEN public.security_rate_limits.window_started_at
+           <= now() - make_interval(secs => p_window_seconds)
+      THEN 1
+      ELSE public.security_rate_limits.request_count + 1
+    END,
+    window_started_at = CASE
+      WHEN public.security_rate_limits.window_started_at
+           <= now() - make_interval(secs => p_window_seconds)
+      THEN now()
+      ELSE public.security_rate_limits.window_started_at
+    END,
+    updated_at = now()
+  RETURNING
+    request_count,
+    window_started_at
+  INTO
+    current_count,
+    current_window;
+
+  allowed := current_count <= p_limit;
+
+  RETURN jsonb_build_object(
+    'allowed', allowed,
+    'remaining', GREATEST(p_limit - current_count, 0),
+    'count', current_count,
+    'window_started_at', current_window
+  );
+END;
+$function$;
+
+REVOKE ALL PRIVILEGES
+ON FUNCTION public.check_security_rate_limit(text, integer, integer)
+FROM PUBLIC;
+
+REVOKE ALL PRIVILEGES
+ON FUNCTION public.check_security_rate_limit(text, integer, integer)
+FROM anon;
+
+REVOKE ALL PRIVILEGES
+ON FUNCTION public.check_security_rate_limit(text, integer, integer)
+FROM authenticated;
+
+GRANT EXECUTE
+ON FUNCTION public.check_security_rate_limit(text, integer, integer)
+TO service_role;
+
+-- ============================================================
+-- 6. APPROVED USER CHECK FUNCTION
 -- ============================================================
 
 CREATE OR REPLACE FUNCTION public.is_approved_user()
