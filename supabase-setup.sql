@@ -166,7 +166,23 @@ ON FUNCTION public.check_security_rate_limit(text, integer, integer)
 TO service_role;
 
 -- ============================================================
--- 6. APPROVED USER CHECK FUNCTION
+-- 6. MFA ASSURANCE CHECK FUNCTION
+-- ============================================================
+CREATE OR REPLACE FUNCTION public.is_aal2()
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY INVOKER
+SET search_path = public
+AS $function$
+  SELECT COALESCE((auth.jwt() ->> 'aal') = 'aal2', false);
+$function$;
+REVOKE ALL PRIVILEGES ON FUNCTION public.is_aal2() FROM PUBLIC;
+REVOKE ALL PRIVILEGES ON FUNCTION public.is_aal2() FROM anon;
+GRANT EXECUTE ON FUNCTION public.is_aal2() TO authenticated;
+
+-- ============================================================
+-- 7. APPROVED USER CHECK FUNCTION
 -- ============================================================
 
 CREATE OR REPLACE FUNCTION public.is_approved_user()
@@ -201,6 +217,7 @@ AS $function$
     WHERE id = auth.uid()
       AND status = 'approved'
       AND role IN ('admin', 'super_admin')
+      AND public.is_aal2()
   );
 $function$;
 
@@ -220,6 +237,7 @@ AS $function$
     FROM public.user_profiles
     WHERE id = auth.uid()
       AND status = 'approved'
+      AND public.is_aal2()
       AND (
         role = 'super_admin'
         OR 'edit_library' = ANY (permissions)
@@ -490,6 +508,9 @@ FROM anon;
 GRANT EXECUTE
 ON FUNCTION public.can_edit_library()
 TO authenticated;
+REVOKE ALL PRIVILEGES ON FUNCTION public.is_aal2() FROM PUBLIC;
+REVOKE ALL PRIVILEGES ON FUNCTION public.is_aal2() FROM anon;
+GRANT EXECUTE ON FUNCTION public.is_aal2() TO authenticated;
 
 -- ============================================================
 -- 15. PRIVATE STORAGE BUCKET
