@@ -151,6 +151,19 @@ async function saveAppData(supabase: any, value: any) {
   if (error) throw error;
 }
 
+async function writeAuditLog(supabase: any, c: any, actorId: string | null, action: string, targetType: string | null, targetId: string | null, metadata: Record<string, any> = {}) {
+  const { error } = await supabase.from('security_audit_logs').insert({
+    actor_id: actorId,
+    action,
+    target_type: targetType,
+    target_id: targetId,
+    metadata,
+    ip_address: c.req.header('CF-Connecting-IP') || null,
+    user_agent: (c.req.header('User-Agent') || '').slice(0, 500) || null,
+  });
+  if (error) console.error('Audit log write failed:', error.message);
+}
+
 // Canonical phone format for this Egyptian-only portal: 01XXXXXXXXX.
 function normalizeEgyptianPhone(value: unknown): string {
   let phone = String(value ?? '').trim().replace(/[\s().-]/g, '');
@@ -338,6 +351,7 @@ app.post('/api/admin/users/:id/approve', authenticateUser, async (c) => {
     const target = await requireConfirmedTarget(supabase, c.req.param('id'));
     const { data, error } = await supabase.from('user_profiles').update({ status: 'approved' }).eq('id', target.id).select('*').single();
     if (error) throw error;
+    await writeAuditLog(supabase, c, actor.id, 'approve_user', 'user_profile', target.id, { new_status: 'approved' });
     return c.json({ user: data });
   } catch (error: any) {
     return c.json({ error: error?.message || 'Failed to approve user' }, 400);
@@ -356,6 +370,7 @@ app.post('/api/admin/users/:id/block', authenticateUser, async (c) => {
     if (targetProfile?.role === 'super_admin') return c.json({ error: 'Cannot block a super admin' }, 403);
     const { data, error } = await supabase.from('user_profiles').update({ status: 'blocked' }).eq('id', target.id).select('*').single();
     if (error) throw error;
+    await writeAuditLog(supabase, c, actor.id, 'block_user', 'user_profile', target.id, { new_status: 'blocked' });
     return c.json({ user: data });
   } catch (error: any) {
     return c.json({ error: error?.message || 'Failed to block user' }, 400);
@@ -373,6 +388,7 @@ app.post('/api/admin/users/:id/permissions', authenticateUser, async (c) => {
     const role = body.role === 'admin' ? 'admin' : 'user';
     const { data, error } = await supabase.from('user_profiles').update({ role, permissions }).eq('id', target.id).select('*').single();
     if (error) throw error;
+    await writeAuditLog(supabase, c, actor.id, 'change_user_permissions', 'user_profile', target.id, { role, permissions });
     return c.json({ user: data });
   } catch (error: any) {
     return c.json({ error: error?.message || 'Failed to update permissions' }, 400);
