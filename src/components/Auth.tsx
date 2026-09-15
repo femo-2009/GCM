@@ -222,7 +222,7 @@ export default function Auth({ lang, setLang, onAuthSuccess }: AuthProps) {
         if (!/^01[0125][0-9]{8}$/.test(normalizedPhone)) {
           throw new Error(t.invalidEgyptianPhone);
         }
-        if (formData.password.length < 8) {
+        if (formData.password.length < 12) {
           throw new Error(t.passwordLength);
         }
 
