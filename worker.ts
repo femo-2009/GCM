@@ -824,6 +824,19 @@ app.delete('/api/library/:id', authenticateUser, async (c) => {
 });
 
 const PROFILE_MEDIA_MAX_BYTES = 5 * 1024 * 1024;
+const PROFILE_MAX_DISCIPLES = 100;
+const PROFILE_MAX_GROUPS = 100;
+const PROFILE_MAX_NAME_LENGTH = 200;
+const PROFILE_MAX_DESCRIPTION_LENGTH = 5000;
+const PROFILE_MAX_MEMBER_IDS = 200;
+
+function validProfileText(value: unknown, maxLength: number, required = false): value is string {
+  return typeof value === 'string' && (required ? value.trim().length > 0 : true) && value.length <= maxLength;
+}
+
+function validIdArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.length <= PROFILE_MAX_MEMBER_IDS && value.every((id) => typeof id === 'string' && id.length <= 100);
+}
 const PROFILE_MEDIA_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const PROFILE_MEDIA_SLOTS = new Set(['avatar', 'personal-plan', 'groups', 'disciples']);
 
@@ -965,11 +978,17 @@ app.post('/api/profile/disciples', authenticateUser, async (c) => {
     const user = c.get('user');
     const supabase = createSupabaseClient(c.env);
     const { action, discipleId, name, description, photo } = await c.req.json();
+    if (!['add', 'edit', 'delete'].includes(action)) return c.json({ error: 'Invalid disciple action', code: 'profile_invalid_action' }, 400);
+    if (discipleId !== undefined && (typeof discipleId !== 'string' || discipleId.length > 100)) return c.json({ error: 'Invalid disciple ID', code: 'profile_invalid_id' }, 400);
+    if (name !== undefined && !validProfileText(name, PROFILE_MAX_NAME_LENGTH, action === 'add')) return c.json({ error: 'Invalid disciple name', code: 'profile_invalid_name' }, 400);
+    if (description !== undefined && !validProfileText(description, PROFILE_MAX_DESCRIPTION_LENGTH)) return c.json({ error: 'Invalid disciple description', code: 'profile_invalid_description' }, 400);
     if (photo && !isSafeProfileMediaPath(photo, user.id, false, user)) return c.json({ error: 'Invalid disciple image path', code: 'profile_media_invalid_path' }, 400);
     const { data: profile } = await supabase.from('user_profiles').select('disciples').eq('id', user.id).single();
-    let disciples = profile?.disciples || [];
+    let disciples = Array.isArray(profile?.disciples) ? profile.disciples : [];
+    if (disciples.length > PROFILE_MAX_DISCIPLES) return c.json({ error: 'Too many disciples', code: 'profile_limit_exceeded' }, 400);
     if (action === 'add') {
-      disciples.push({ id: `disciple-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`, name, description: description || '', photo: photo || '' });
+      if (disciples.length >= PROFILE_MAX_DISCIPLES) return c.json({ error: 'Too many disciples', code: 'profile_limit_exceeded' }, 400);
+      disciples.push({ id: `disciple-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`, name: name.trim(), description: description || '', photo: photo || '' });
     } else if (action === 'edit' && discipleId) {
       const idx = disciples.findIndex((d: any) => d.id === discipleId);
       if (idx === -1) return c.json({ error: 'Disciple not found' }, 404);
@@ -989,11 +1008,18 @@ app.post('/api/profile/groups', authenticateUser, async (c) => {
     const user = c.get('user');
     const supabase = createSupabaseClient(c.env);
     const { action, groupId, title, description, photo, memberIds } = await c.req.json();
+    if (!['add', 'edit', 'delete'].includes(action)) return c.json({ error: 'Invalid group action', code: 'profile_invalid_action' }, 400);
+    if (groupId !== undefined && (typeof groupId !== 'string' || groupId.length > 100)) return c.json({ error: 'Invalid group ID', code: 'profile_invalid_id' }, 400);
+    if (title !== undefined && !validProfileText(title, PROFILE_MAX_NAME_LENGTH, action === 'add')) return c.json({ error: 'Invalid group title', code: 'profile_invalid_title' }, 400);
+    if (description !== undefined && !validProfileText(description, PROFILE_MAX_DESCRIPTION_LENGTH)) return c.json({ error: 'Invalid group description', code: 'profile_invalid_description' }, 400);
+    if (memberIds !== undefined && !validIdArray(memberIds)) return c.json({ error: 'Invalid group members', code: 'profile_invalid_members' }, 400);
     if (photo && !isSafeProfileMediaPath(photo, user.id, false, user)) return c.json({ error: 'Invalid group image path', code: 'profile_media_invalid_path' }, 400);
     const { data: profile } = await supabase.from('user_profiles').select('user_groups').eq('id', user.id).single();
-    let userGroups = profile?.user_groups || [];
+    let userGroups = Array.isArray(profile?.user_groups) ? profile.user_groups : [];
+    if (userGroups.length > PROFILE_MAX_GROUPS) return c.json({ error: 'Too many groups', code: 'profile_limit_exceeded' }, 400);
     if (action === 'add') {
-      userGroups.push({ id: `ugroup-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`, title, description: description || '', photo: photo || '', memberIds: memberIds || [] });
+      if (userGroups.length >= PROFILE_MAX_GROUPS) return c.json({ error: 'Too many groups', code: 'profile_limit_exceeded' }, 400);
+      userGroups.push({ id: `ugroup-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`, title: title.trim(), description: description || '', photo: photo || '', memberIds: memberIds || [] });
     } else if (action === 'edit' && groupId) {
       const idx = userGroups.findIndex((g: any) => g.id === groupId);
       if (idx === -1) return c.json({ error: 'Group not found' }, 404);
