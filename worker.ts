@@ -425,6 +425,96 @@ app.post('/api/admin/users/:id/permissions', authenticateUser, async (c) => {
   }
 });
 
+function decodeLegacyImage(value: unknown): { mimeType: string; bytes: Uint8Array } | null {
+  if (typeof value !== 'string') return null;
+  const match = value.match(/^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=\s]+)$/);
+  if (!match) return null;
+  try {
+    const binary = atob(match[2].replace(/\s/g, ''));
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+    if (bytes.byteLength > PROFILE_MEDIA_MAX_BYTES) return null;
+    return { mimeType: match[1], bytes };
+  } catch {
+    return null;
+  }
+}
+
+function migrationExtension(mimeType: string): string {
+  return mimeType === 'image/jpeg' ? 'jpg' : mimeType === 'image/png' ? 'png' : 'webp';
+}
+
+function collectLegacyProfileMedia(profile: any): Array<{ fieldPath: string; value: string; slot: 'avatar' | 'personal-plan' | 'groups' | 'disciples' }> {
+  const items: Array<{ fieldPath: string; value: string; slot: 'avatar' | 'personal-plan' | 'groups' | 'disciples' }> = [];
+  if (decodeLegacyImage(profile.photo)) items.push({ fieldPath: 'photo', value: profile.photo, slot: 'avatar' });
+  if (decodeLegacyImage(profile.personal_plan?.photo)) items.push({ fieldPath: 'personal_plan.photo', value: profile.personal_plan.photo, slot: 'personal-plan' });
+  for (const [index, group] of (Array.isArray(profile.user_groups) ? profile.user_groups : []).entries()) {
+    if (decodeLegacyImage(group?.photo)) items.push({ fieldPath: `user_groups.${index}.photo`, value: group.photo, slot: 'groups' });
+  }
+  for (const [index, disciple] of (Array.isArray(profile.disciples) ? profile.disciples : []).entries()) {
+    if (decodeLegacyImage(disciple?.photo)) items.push({ fieldPath: `disciples.${index}.photo`, value: disciple.photo, slot: 'disciples' });
+  }
+  return items;
+}
+
+function replaceMigratedProfileMedia(profile: any, migrated: Map<string, string>): any {
+  const next = structuredClone(profile);
+  for (const [fieldPath, storagePath] of migrated.entries()) {
+    const parts = fieldPath.split('.');
+    if (parts[0] === 'photo') next.photo = storagePath;
+    else if (parts[0] === 'personal_plan') next.personal_plan = { ...(next.personal_plan || {}), photo: storagePath };
+    else if ((parts[0] === 'user_groups' || parts[0] === 'disciples') && parts.length === 3) {
+      const collection = next[parts[0]];
+      const index = Number(parts[1]);
+      if (Array.isArray(collection) && collection[index]) collection[index] = { ...collection[index], photo: storagePath };
+    }
+  }
+  return next;
+}
+
+app.post('/api/admin/profile-media/migrate', authenticateUser, async (c) => {
+  try {
+    const actor = c.get('user');
+    if (actor.role !== 'super_admin') return c.json({ error: 'Forbidden - Only super admin can migrate profile media' }, 403);
+    const body = await c.req.json().catch(() => ({}));
+    const dryRun = body?.dryRun !== false;
+    const supabase = createSupabaseClient(c.env);
+    const { data: profiles, error } = await supabase.from('user_profiles').select('id,email,photo,personal_plan,user_groups,disciples');
+    if (error) throw error;
+    const candidates = (profiles || []).flatMap((profile: any) => collectLegacyProfileMedia(profile).map((item) => ({ userId: profile.id, email: profile.email, fieldPath: item.fieldPath, slot: item.slot, chars: item.value.length })));
+    if (dryRun) return c.json({ dryRun: true, total: candidates.length, candidates });
+    const migratedByUser = new Map<string, Map<string, string>>();
+    const migrated = [];
+    for (const profile of profiles || []) {
+      const items = collectLegacyProfileMedia(profile);
+      const paths = new Map<string, string>();
+      for (const item of items) {
+        const decoded = decodeLegacyImage(item.value);
+        if (!decoded) continue;
+        const path = `${profile.id}/${item.slot}/legacy-${crypto.randomUUID()}.${migrationExtension(decoded.mimeType)}`;
+        const backup = await supabase.from('profile_media_migration_backups').upsert({ user_id: profile.id, field_path: item.fieldPath, original_value: item.value, storage_path: path, created_by: actor.id }, { onConflict: 'user_id,field_path', ignoreDuplicates: true }).select('storage_path').maybeSingle();
+        if (backup.error) throw backup.error;
+        const storagePath = backup.data?.storage_path || path;
+        const upload = await supabase.storage.from('profile-media').upload(storagePath, decoded.bytes, { contentType: decoded.mimeType, cacheControl: '3600', upsert: false });
+        if (upload.error && !/already exists/i.test(upload.error.message || '')) throw upload.error;
+        paths.set(item.fieldPath, storagePath);
+        migrated.push({ userId: profile.id, fieldPath: item.fieldPath, storagePath });
+      }
+      if (paths.size) {
+        const updated = replaceMigratedProfileMedia(profile, paths);
+        const update = await supabase.from('user_profiles').update({ photo: updated.photo, personal_plan: updated.personal_plan, user_groups: updated.user_groups, disciples: updated.disciples, updated_at: new Date().toISOString() }).eq('id', profile.id);
+        if (update.error) throw update.error;
+        for (const [fieldPath, storagePath] of paths) await supabase.from('profile_media_migration_backups').update({ migrated_at: new Date().toISOString(), storage_path: storagePath }).eq('user_id', profile.id).eq('field_path', fieldPath);
+        migratedByUser.set(profile.id, paths);
+      }
+    }
+    await writeAuditLog(supabase, c, actor.id, 'migrate_profile_media', 'profile_media', 'legacy-batch', { count: migrated.length });
+    return c.json({ dryRun: false, migrated: migrated.length, items: migrated });
+  } catch (error: any) {
+    return c.json({ error: error?.message || 'Profile media migration failed' }, 500);
+  }
+});
+
 // Home routes
 app.get('/api/home', authenticateUser, async (c) => {
   try {
