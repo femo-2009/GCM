@@ -67,7 +67,14 @@ export default function LibraryView({ lang, user }: LibraryViewProps) {
 
   const fetchLibrary = async () => {
     try {
-      const res = await fetch("/api/library");
+      const token = (await supabase.auth.getSession()).data.session?.access_token;
+      if (!token) {
+        setItems([]);
+        return;
+      }
+      const res = await fetch("/api/library", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       if (res.ok) {
         const data = await res.json();
         setItems(data);
