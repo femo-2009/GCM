@@ -5,6 +5,7 @@
 -- ============================================================
 
 -- 1. Enable required extensions
+
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- ============================================================
@@ -43,7 +44,26 @@ CREATE TABLE IF NOT EXISTS public.user_profiles (
 );
 
 -- ============================================================
--- 4. SECURE ADMIN CHECK FUNCTION
+-- 4. APPROVED USER CHECK FUNCTION
+-- ============================================================
+
+CREATE OR REPLACE FUNCTION public.is_approved_user()
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $function$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.user_profiles
+    WHERE id = auth.uid()
+      AND status = 'approved'
+  );
+$function$;
+
+-- ============================================================
+-- 5. APPROVED ADMIN CHECK FUNCTION
 -- ============================================================
 
 CREATE OR REPLACE FUNCTION public.is_approved_admin()
@@ -63,7 +83,7 @@ AS $function$
 $function$;
 
 -- ============================================================
--- 5. AUTO-CREATE USER PROFILE AFTER SIGN-UP
+-- 6. AUTO-CREATE USER PROFILE AFTER SIGN-UP
 -- ============================================================
 
 CREATE OR REPLACE FUNCTION public.handle_new_user()
@@ -97,7 +117,8 @@ EXCEPTION
 END;
 $function$;
 
-DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+DROP TRIGGER IF EXISTS on_auth_user_created
+ON auth.users;
 
 CREATE TRIGGER on_auth_user_created
 AFTER INSERT ON auth.users
@@ -105,7 +126,7 @@ FOR EACH ROW
 EXECUTE FUNCTION public.handle_new_user();
 
 -- ============================================================
--- 6. UPDATED_AT FUNCTIONS AND TRIGGERS
+-- 7. UPDATED_AT FUNCTIONS AND TRIGGERS
 -- ============================================================
 
 CREATE OR REPLACE FUNCTION public.set_updated_at()
@@ -135,40 +156,64 @@ FOR EACH ROW
 EXECUTE FUNCTION public.set_updated_at();
 
 -- ============================================================
--- 7. ENABLE ROW LEVEL SECURITY
+-- 8. ENABLE ROW LEVEL SECURITY
 -- ============================================================
 
 ALTER TABLE public.app_data ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;
 
 -- ============================================================
--- 8. APP_DATA POLICIES
---
--- These policies are intentionally kept unchanged for now.
--- They will be hardened in a later security step.
+-- 9. APP_DATA POLICIES
 -- ============================================================
 
 DROP POLICY IF EXISTS "Authenticated users can read app_data"
 ON public.app_data;
 
-CREATE POLICY "Authenticated users can read app_data"
-ON public.app_data
-FOR SELECT
-TO authenticated
-USING (true);
-
 DROP POLICY IF EXISTS "Authenticated users can write app_data"
 ON public.app_data;
 
-CREATE POLICY "Authenticated users can write app_data"
+DROP POLICY IF EXISTS "Approved users can read app_data"
+ON public.app_data;
+
+DROP POLICY IF EXISTS "Approved admins can insert app_data"
+ON public.app_data;
+
+DROP POLICY IF EXISTS "Approved admins can update app_data"
+ON public.app_data;
+
+DROP POLICY IF EXISTS "Approved admins can delete app_data"
+ON public.app_data;
+
+DROP POLICY IF EXISTS "Service role full access app_data"
+ON public.app_data;
+
+CREATE POLICY "Approved users can read app_data"
 ON public.app_data
-FOR ALL
+FOR SELECT
 TO authenticated
-USING (true)
-WITH CHECK (true);
+USING (public.is_approved_user());
+
+CREATE POLICY "Approved admins can insert app_data"
+ON public.app_data
+FOR INSERT
+TO authenticated
+WITH CHECK (public.is_approved_admin());
+
+CREATE POLICY "Approved admins can update app_data"
+ON public.app_data
+FOR UPDATE
+TO authenticated
+USING (public.is_approved_admin())
+WITH CHECK (public.is_approved_admin());
+
+CREATE POLICY "Approved admins can delete app_data"
+ON public.app_data
+FOR DELETE
+TO authenticated
+USING (public.is_approved_admin());
 
 -- ============================================================
--- 9. SECURE USER_PROFILES POLICIES
+-- 10. USER_PROFILES POLICIES
 -- ============================================================
 
 DROP POLICY IF EXISTS "Authenticated users can read profiles"
@@ -204,14 +249,14 @@ FOR SELECT
 TO authenticated
 USING (public.is_approved_admin());
 
--- No INSERT, UPDATE, DELETE, or ALL policies are granted
--- to anon or authenticated users on user_profiles.
+-- There are intentionally no INSERT, UPDATE, DELETE,
+-- or ALL policies for anon or authenticated users.
 --
--- Profile creation is performed by the SECURITY DEFINER trigger.
--- Administrative profile changes are performed by the protected server.
+-- New profiles are created by the SECURITY DEFINER trigger.
+-- Administrative profile changes are handled by the protected server.
 
 -- ============================================================
--- 10. REMOVE EXCESSIVE DIRECT TABLE PRIVILEGES
+-- 11. REMOVE EXCESSIVE DIRECT USER_PROFILES PRIVILEGES
 -- ============================================================
 
 REVOKE ALL PRIVILEGES
@@ -227,8 +272,36 @@ ON TABLE public.user_profiles
 TO authenticated;
 
 -- ============================================================
--- 11. RESTRICT ADMIN FUNCTION EXECUTION
+-- 12. REMOVE EXCESSIVE DIRECT APP_DATA PRIVILEGES
 -- ============================================================
+
+REVOKE ALL PRIVILEGES
+ON TABLE public.app_data
+FROM anon;
+
+REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER
+ON TABLE public.app_data
+FROM authenticated;
+
+GRANT SELECT
+ON TABLE public.app_data
+TO authenticated;
+
+-- ============================================================
+-- 13. RESTRICT FUNCTION EXECUTION
+-- ============================================================
+
+REVOKE EXECUTE
+ON FUNCTION public.is_approved_user()
+FROM PUBLIC;
+
+REVOKE EXECUTE
+ON FUNCTION public.is_approved_user()
+FROM anon;
+
+GRANT EXECUTE
+ON FUNCTION public.is_approved_user()
+TO authenticated;
 
 REVOKE EXECUTE
 ON FUNCTION public.is_approved_admin()
@@ -243,7 +316,7 @@ ON FUNCTION public.is_approved_admin()
 TO authenticated;
 
 -- ============================================================
--- 12. STORAGE BUCKET
+-- 14. STORAGE BUCKET
 --
 -- Storage policies will be hardened in a later security step.
 -- ============================================================
@@ -302,7 +375,7 @@ TO authenticated
 USING (bucket_id = 'media');
 
 -- ============================================================
--- 13. INITIAL APP DATA
+-- 15. INITIAL APP DATA
 -- ============================================================
 
 INSERT INTO public.app_data (
@@ -327,10 +400,10 @@ VALUES (
 ON CONFLICT (key) DO NOTHING;
 
 -- ============================================================
--- 14. MANUAL SUPER ADMIN SETUP
+-- 16. MANUAL SUPER ADMIN SETUP
 --
 -- Replace YOUR_EMAIL with your real email only when needed.
--- Run this command manually and only for your own account:
+-- Run this command manually and only for your own account.
 --
 -- UPDATE public.user_profiles
 -- SET role = 'super_admin',
