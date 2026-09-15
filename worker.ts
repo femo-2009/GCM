@@ -325,7 +325,8 @@ app.post('/api/auth/signup', async (c) => {
 });
 
 app.get('/api/auth/profile', authenticateAnyUser, async (c) => {
-  return c.json({ profile: c.get('user') });
+  const supabase = createSupabaseClient(c.env);
+  return c.json({ profile: await hydrateProfileMedia(supabase, c.get('user')) });
 });
 
 // Admin-only user directory: return only users whose Supabase email is confirmed.
@@ -815,18 +816,48 @@ app.delete('/api/profile-media', authenticateUser, async (c) => {
   }
 });
 
+async function signProfileMediaValue(supabase: any, value: unknown): Promise<unknown> {
+  if (typeof value !== 'string' || !value.includes('/')) return value;
+  const parts = value.split('/');
+  if (parts.length !== 3 || !PROFILE_MEDIA_SLOTS.has(parts[1])) return value;
+  const { data } = await supabase.storage.from('profile-media').createSignedUrl(value, 3600);
+  return data?.signedUrl || value;
+}
+
+async function hydrateProfileMedia(supabase: any, profile: any): Promise<any> {
+  if (!profile) return profile;
+  const hydrated = { ...profile };
+  hydrated.photo = await signProfileMediaValue(supabase, profile.photo);
+  if (profile.personal_plan && typeof profile.personal_plan === 'object') {
+    hydrated.personal_plan = { ...profile.personal_plan };
+    hydrated.personal_plan.photo = await signProfileMediaValue(supabase, profile.personal_plan.photo);
+  }
+  if (Array.isArray(profile.user_groups)) {
+    hydrated.user_groups = await Promise.all(profile.user_groups.map(async (group: any) => ({ ...group, photo: await signProfileMediaValue(supabase, group.photo) })));
+  }
+  if (Array.isArray(profile.disciples)) {
+    hydrated.disciples = await Promise.all(profile.disciples.map(async (disciple: any) => ({ ...disciple, photo: await signProfileMediaValue(supabase, disciple.photo) })));
+  }
+  return hydrated;
+}
+
 // Profile routes
 app.post('/api/profile/update', authenticateUser, async (c) => {
   try {
     const user = c.get('user');
     const supabase = createSupabaseClient(c.env);
     const { photo, counts, personalPlan } = await c.req.json();
+    if (photo !== undefined && photo !== '' && !isSafeProfileMediaPath(photo, user.id, false, user)) return c.json({ error: 'Invalid profile image path', code: 'profile_media_invalid_path' }, 400);
     const updates: any = { updated_at: new Date().toISOString() };
     if (photo !== undefined) updates.photo = photo;
     if (counts !== undefined) updates.counts = counts;
-    if (personalPlan !== undefined) updates.personal_plan = personalPlan;
-    const { data } = await supabase.from('user_profiles').update(updates).eq('id', user.id).select('*').single();
-    return c.json({ user: data });
+    if (personalPlan !== undefined) {
+      if (personalPlan.photo !== undefined && personalPlan.photo !== '' && !isSafeProfileMediaPath(personalPlan.photo, user.id, false, user)) return c.json({ error: 'Invalid plan image path', code: 'profile_media_invalid_path' }, 400);
+      updates.personal_plan = personalPlan;
+    }
+    const { data, error } = await supabase.from('user_profiles').update(updates).eq('id', user.id).select('*').single();
+    if (error) throw error;
+    return c.json({ user: await hydrateProfileMedia(supabase, data) });
   } catch (err: any) {
     return c.json({ error: err.message || 'Failed to update profile' }, 500);
   }
@@ -837,6 +868,7 @@ app.post('/api/profile/disciples', authenticateUser, async (c) => {
     const user = c.get('user');
     const supabase = createSupabaseClient(c.env);
     const { action, discipleId, name, description, photo } = await c.req.json();
+    if (photo && !isSafeProfileMediaPath(photo, user.id, false, user)) return c.json({ error: 'Invalid disciple image path', code: 'profile_media_invalid_path' }, 400);
     const { data: profile } = await supabase.from('user_profiles').select('disciples').eq('id', user.id).single();
     let disciples = profile?.disciples || [];
     if (action === 'add') {
@@ -849,7 +881,7 @@ app.post('/api/profile/disciples', authenticateUser, async (c) => {
       disciples = disciples.filter((d: any) => d.id !== discipleId);
     }
     const { data: updatedProfile } = await supabase.from('user_profiles').update({ disciples, updated_at: new Date().toISOString() }).eq('id', user.id).select('*').single();
-    return c.json({ user: updatedProfile });
+    return c.json({ user: await hydrateProfileMedia(supabase, updatedProfile) });
   } catch {
     return c.json({ error: 'Failed to manage disciples' }, 500);
   }
@@ -860,6 +892,7 @@ app.post('/api/profile/groups', authenticateUser, async (c) => {
     const user = c.get('user');
     const supabase = createSupabaseClient(c.env);
     const { action, groupId, title, description, photo, memberIds } = await c.req.json();
+    if (photo && !isSafeProfileMediaPath(photo, user.id, false, user)) return c.json({ error: 'Invalid group image path', code: 'profile_media_invalid_path' }, 400);
     const { data: profile } = await supabase.from('user_profiles').select('user_groups').eq('id', user.id).single();
     let userGroups = profile?.user_groups || [];
     if (action === 'add') {
@@ -872,7 +905,7 @@ app.post('/api/profile/groups', authenticateUser, async (c) => {
       userGroups = userGroups.filter((g: any) => g.id !== groupId);
     }
     const { data: updatedProfile } = await supabase.from('user_profiles').update({ user_groups: userGroups, updated_at: new Date().toISOString() }).eq('id', user.id).select('*').single();
-    return c.json({ user: updatedProfile });
+    return c.json({ user: await hydrateProfileMedia(supabase, updatedProfile) });
   } catch {
     return c.json({ error: 'Failed to manage groups' }, 500);
   }
