@@ -33,6 +33,7 @@ export default function AdminPanelView({ lang, user }: AdminPanelViewProps) {
   const [approvedUsers, setApprovedUsers] = useState<User[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
+  const [mediaMigrationPreview, setMediaMigrationPreview] = useState<any[] | null>(null);
 
   // Modal / Detail States
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
@@ -96,6 +97,17 @@ export default function AdminPanelView({ lang, user }: AdminPanelViewProps) {
     const payload = await response.json();
     if (!response.ok) throw new Error(payload?.error || "Admin action failed");
     return payload;
+  };
+
+  const handlePreviewMediaMigration = async () => {
+    await withLoading(async () => {
+      try {
+        const payload = await adminRequest('/api/admin/profile-media/migrate', { dryRun: true });
+        setMediaMigrationPreview(payload.candidates || []);
+      } catch (error: any) {
+        alert(error.message || t.profileMediaMigrationFailed);
+      }
+    });
   };
 
   const handleApprove = async (id: string) => {
@@ -190,6 +202,34 @@ export default function AdminPanelView({ lang, user }: AdminPanelViewProps) {
         <p className="font-bold mb-1">{t.dataProtectionLimitsTitle}</p>
         <p>{t.adminDataProtectionLimits}</p>
       </div>
+
+      {isSuperAdmin && (
+        <section className="rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-4 text-sm text-indigo-950 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="font-bold">{t.profileMediaMigrationTitle}</p>
+              <p className="text-xs mt-1">{t.profileMediaMigrationDescription}</p>
+            </div>
+            <button
+              type="button"
+              onClick={handlePreviewMediaMigration}
+              className="shrink-0 rounded-xl bg-indigo-600 px-3 py-2 text-xs font-bold text-white hover:bg-indigo-700 cursor-pointer"
+            >
+              {t.profileMediaMigrationPreview}
+            </button>
+          </div>
+          {mediaMigrationPreview !== null && (
+            <div className="rounded-xl bg-white border border-indigo-100 p-3 text-xs space-y-1">
+              <p className="font-bold">{t.profileMediaMigrationFound}: {mediaMigrationPreview.length}</p>
+              {mediaMigrationPreview.length > 0 ? mediaMigrationPreview.map((item, index) => (
+                <p key={`${item.userId}-${item.fieldPath}-${index}`} className="text-slate-700">
+                  {item.email} — {item.fieldPath} — {item.chars} {t.profileMediaMigrationCharacters}
+                </p>
+              )) : <p className="text-slate-500">{t.profileMediaMigrationNone}</p>}
+            </div>
+          )}
+        </section>
+      )}
 
       {/* Page Title */}
       <div className="flex items-center justify-between border-b border-slate-200 pb-4">
