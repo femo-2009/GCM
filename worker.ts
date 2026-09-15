@@ -532,7 +532,13 @@ app.get('/api/library', authenticateUser, async (c) => {
     const appData = await getAppData(supabase);
     const textItems = (appData.library || []).filter((item: any) => item.type === 'text');
     const { data: videos } = await supabase.from('videos').select('id, type, title, description, file_url').order('created_at', { ascending: false });
-    const mediaItems = (videos || []).map((v: any) => ({ id: v.id, type: v.type, title: v.title, description: v.description, url: v.file_url || '' }));
+    const mediaItems = (videos || []).map((v: any) => ({
+      id: v.id,
+      type: v.type,
+      title: v.title,
+      description: v.description,
+      url: `/api/videos/stream/${v.id}`,
+    }));
     return c.json([...textItems, ...mediaItems]);
   } catch {
     return c.json([]);
@@ -678,6 +684,15 @@ app.post('/api/profile/groups', authenticateUser, async (c) => {
   }
 });
 
+const MAX_MEDIA_BYTES = 2 * 1024 * 1024 * 1024;
+const ALLOWED_MEDIA_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'video/mp4', 'video/webm', 'video/quicktime']);
+
+function isSafeStoragePath(path: string, mediaType: string): boolean {
+  if (!path || path.includes('..') || path.startsWith('/') || path.includes('\\')) return false;
+  const requiredPrefix = mediaType === 'photo' ? 'photos/' : 'videos/';
+  return path.startsWith(requiredPrefix);
+}
+
 // Video upload routes (simplified for Workers - uses Supabase Storage for everything)
 app.post('/api/videos/register', authenticateUser, async (c) => {
   try {
@@ -688,38 +703,40 @@ app.post('/api/videos/register', authenticateUser, async (c) => {
     const supabase = createSupabaseClient(c.env);
     const { title, description, fileName, mimeType, sizeBytes, storagePath, parts, type } = await c.req.json();
     const mediaType = type === 'photo' ? 'photo' : 'video';
+    const normalizedMime = String(mimeType || '').toLowerCase();
+    const normalizedSize = Number(sizeBytes || 0);
+    if (!title || String(title).length > 200 || String(description || '').length > 5000) {
+      return c.json({ error: 'Invalid title or description' }, 400);
+    }
+    if (!ALLOWED_MEDIA_TYPES.has(normalizedMime) || (mediaType === 'photo' && !normalizedMime.startsWith('image/')) || (mediaType === 'video' && !normalizedMime.startsWith('video/'))) {
+      return c.json({ error: 'Unsupported media type', code: 'unsupported_media_type' }, 400);
+    }
+    if (!Number.isSafeInteger(normalizedSize) || normalizedSize <= 0 || normalizedSize > MAX_MEDIA_BYTES) {
+      return c.json({ error: 'Media file is too large or invalid', code: 'media_too_large' }, 413);
+    }
     if (!storagePath && !parts) return c.json({ error: 'Either storagePath or parts is required' }, 400);
 
     let storagePathValue: string;
-    let publicUrl: string;
-
-    if (parts && Array.isArray(parts) && parts.length > 0) {
-      storagePathValue = JSON.stringify(parts);
-      publicUrl = '';
-    } else if (storagePath) {
-      storagePathValue = storagePath;
-      const { data: { publicUrl: url } } = supabase.storage.from('media').getPublicUrl(storagePath);
-      publicUrl = url;
-    } else {
-      return c.json({ error: 'Invalid storagePath or parts' }, 400);
+    const uploadParts = parts && Array.isArray(parts) && parts.length > 0 ? parts : [storagePath];
+    if (uploadParts.length > 50 || uploadParts.some((part: any) => typeof part !== 'string' || !isSafeStoragePath(part, mediaType))) {
+      return c.json({ error: 'Invalid storage path' }, 400);
     }
+    storagePathValue = parts && Array.isArray(parts) && parts.length > 0 ? JSON.stringify(parts) : String(storagePath);
 
     const { data: video, error: dbError } = await supabase.from('videos').insert({
-      type: mediaType, title: title || fileName || 'Untitled', description: description || '',
-      file_name: fileName || null, storage_path: storagePathValue, file_url: publicUrl,
-      mime_type: mimeType || (mediaType === 'photo' ? 'image/jpeg' : 'video/mp4'),
-      size_bytes: sizeBytes || 0, duration_seconds: 0, status: 'ready',
+      type: mediaType, title, description: description || '',
+      file_name: typeof fileName === 'string' ? fileName.slice(0, 255) : null, storage_path: storagePathValue, file_url: '',
+      mime_type: normalizedMime,
+      size_bytes: normalizedSize, duration_seconds: 0, status: 'ready',
     }).select().single();
 
     if (dbError) throw dbError;
 
-    if (parts && Array.isArray(parts) && parts.length > 0) {
-      const streamUrl = `/api/videos/stream/${video.id}`;
-      await supabase.from('videos').update({ file_url: streamUrl }).eq('id', video.id);
-      video.file_url = streamUrl;
-    }
+    const streamUrl = `/api/videos/stream/${video.id}`;
+    await supabase.from('videos').update({ file_url: streamUrl }).eq('id', video.id);
+    video.file_url = streamUrl;
 
-    return c.json({ success: true, publicUrl, video });
+    return c.json({ success: true, publicUrl: streamUrl, video });
   } catch (err: any) {
     return c.json({ error: err.message || 'Failed to register uploaded video' }, 500);
   }
@@ -743,8 +760,10 @@ app.get('/api/videos/stream/:id', authenticateUser, async (c) => {
     const totalSize = video.size_bytes || 0;
     const contentType = video.mime_type || 'video/mp4';
 
-    if (parts.length === 1 && video.file_url && !video.file_url.startsWith('/api/')) {
-      return c.redirect(video.file_url, 302);
+    if (parts.length === 1) {
+      const { data: blob, error: downloadError } = await supabase.storage.from('media').download(parts[0]);
+      if (downloadError || !blob) return c.json({ error: 'Media file not found' }, 404);
+      return new Response(blob, { status: 200, headers: { 'Content-Type': contentType, 'Content-Length': String(blob.size), 'Cache-Control': 'private, no-store' } });
     }
 
     const range = c.req.header('Range');
@@ -764,10 +783,9 @@ app.get('/api/videos/stream/:id', authenticateUser, async (c) => {
           let bytesRemaining = chunkSize;
           for (const part of parts) {
             if (bytesRemaining <= 0) break;
-            const { data: { publicUrl } } = supabase.storage.from('media').getPublicUrl(part);
-            const partRes = await fetch(publicUrl);
-            if (!partRes.ok) break;
-            const partBuf = await partRes.arrayBuffer();
+            const { data: partBlob, error: partError } = await supabase.storage.from('media').download(part);
+            if (partError || !partBlob) break;
+            const partBuf = await partBlob.arrayBuffer();
             const partSize = partBuf.byteLength;
             const partEnd = byteOffset + partSize;
             if (partEnd > start && byteOffset <= end) {
@@ -797,10 +815,9 @@ app.get('/api/videos/stream/:id', authenticateUser, async (c) => {
     const body = new ReadableStream({
       async start(controller) {
         for (const part of parts) {
-          const { data: { publicUrl } } = supabase.storage.from('media').getPublicUrl(part);
-          const partRes = await fetch(publicUrl);
-          if (!partRes.ok) break;
-          const partBuf = await partRes.arrayBuffer();
+          const { data: partBlob, error: partError } = await supabase.storage.from('media').download(part);
+          if (partError || !partBlob) break;
+          const partBuf = await partBlob.arrayBuffer();
           controller.enqueue(new Uint8Array(partBuf));
         }
         controller.close();
