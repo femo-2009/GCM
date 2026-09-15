@@ -133,6 +133,11 @@ export const translations = {
     noPendingRequests: 'لا توجد طلبات انضمام قيد الانتظار حالياً.',
     userDeletedFromRequests: 'تم تصنيف الطلب وإزالته من قائمة الانتظار لمنع تشتيت المسؤول.',
 
+    dataProtectionLimitsTitle: 'حدود حماية البيانات',
+    dataProtectionLimits: 'الصور: حتى 5 MB (JPG أو PNG أو WebP). الخطة الشخصية: حتى 10,000 حرف. يمكنك إنشاء حتى 50 تلميذًا و20 مجموعة، وبحد أقصى 100 عضو لكل مجموعة.',
+    discipleLimits: 'الصورة حتى 5 MB — JPG أو PNG أو WebP. الحد الأقصى 50 تلميذًا.',
+    groupLimits: 'الصورة حتى 5 MB — JPG أو PNG أو WebP. الحد الأقصى 20 مجموعة و100 عضو.',
+    adminDataProtectionLimits: 'الصور الشخصية والمرفوعة: حتى 5 MB وبأنواع JPG أو PNG أو WebP. الخطة الشخصية حتى 10,000 حرف. حد المجموعات 20، والتلاميذ 50، وأعضاء المجموعة 100.',
     // Common
     requiredField: 'هذا الحقل مطلوب',
     passwordsDoNotMatch: 'كلمتا المرور غير متطابقتين',
@@ -293,6 +298,11 @@ export const translations = {
     noPendingRequests: 'No pending requests at this time.',
     userDeletedFromRequests: 'Request removed from pending requests to keep list clean.',
 
+    dataProtectionLimitsTitle: 'Data protection limits',
+    dataProtectionLimits: 'Images: up to 5 MB (JPG, PNG, or WebP). Personal plan: up to 10,000 characters. You can create up to 50 disciples and 20 groups, with up to 100 members per group.',
+    discipleLimits: 'Image up to 5 MB — JPG, PNG, or WebP. Maximum 50 disciples.',
+    groupLimits: 'Image up to 5 MB — JPG, PNG, or WebP. Maximum 20 groups and 100 members.',
+    adminDataProtectionLimits: 'Profile and uploaded images: up to 5 MB in JPG, PNG, or WebP. Personal plan up to 10,000 characters. Limits: 20 groups, 50 disciples, and 100 members per group.',
     // Common
     requiredField: 'This field is required',
     passwordsDoNotMatch: 'Passwords do not match',
