@@ -749,7 +749,7 @@ function isSafeProfileMediaPath(value: unknown, userId: string, allowAdmin: bool
   return allowAdmin || parts[0] === profile.id;
 }
 
-app.post('/api/profile-media/upload', authenticateUser, async (c) => {
+app.post('/api/profile-media/upload', authenticateAnyUser, async (c) => {
   try {
     const user = c.get('user');
     const body = await c.req.parseBody();
@@ -773,6 +773,13 @@ app.post('/api/profile-media/upload', authenticateUser, async (c) => {
       upsert: false,
     });
     if (error) throw error;
+    if (slot === 'avatar') {
+      const { error: profileError } = await supabase.from('user_profiles').update({ photo: path, updated_at: new Date().toISOString() }).eq('id', user.id);
+      if (profileError) {
+        await supabase.storage.from('profile-media').remove([path]);
+        throw profileError;
+      }
+    }
     await writeAuditLog(supabase, c, user.id, 'upload_profile_media', 'profile_media', path, { slot, size_bytes: file.size, content_type: contentType });
     return c.json({ path, slot });
   } catch (error: any) {
