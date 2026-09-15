@@ -816,7 +816,12 @@ app.post('/api/videos/register', authenticateUser, async (c) => {
 app.get('/api/videos/stream/:id', authenticateUser, async (c) => {
   try {
     const supabase = createSupabaseClient(c.env);
-    const { data: video, error } = await supabase.from('videos').select('*').eq('id', c.req.param('id')).single();
+    const { data: video, error } = await supabase
+      .from('videos')
+      .select('*')
+      .eq('id', c.req.param('id'))
+      .eq('status', 'ready')
+      .single();
     if (error || !video) return c.json({ error: 'Video not found' }, 404);
 
     let parts: string[];
