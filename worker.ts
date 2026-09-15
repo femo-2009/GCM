@@ -596,7 +596,9 @@ app.get('/api/library', authenticateUser, async (c) => {
       type: v.type,
       title: v.title,
       description: v.description,
-      url: `/api/videos/stream/${v.id}`,
+      url: typeof v.file_url === 'string' && v.file_url.trim()
+        ? v.file_url
+        : `/api/videos/stream/${v.id}`,
     }));
     return c.json([...textItems, ...mediaItems]);
   } catch {
