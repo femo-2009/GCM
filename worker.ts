@@ -13,6 +13,7 @@ const RATE_LIMITS = {
   signup: { limit: 10, windowSeconds: 3600 },
   admin: { limit: 60, windowSeconds: 60 },
   mediaRegister: { limit: 10, windowSeconds: 3600 },
+  profileMedia: { limit: 30, windowSeconds: 3600 },
 };
 
 function decodeVerifiedJwtPayload(token: string): Record<string, any> | null {
@@ -211,6 +212,13 @@ app.use('/api/admin/*', async (c, next) => {
 app.use('/api/videos/register', async (c, next) => {
   const supabase = createSupabaseClient(c.env);
   const limited = await enforceRateLimit(supabase, c, 'media-register', RATE_LIMITS.mediaRegister.limit, RATE_LIMITS.mediaRegister.windowSeconds);
+  if (limited) return limited;
+  await next();
+});
+
+app.use('/api/profile-media/*', async (c, next) => {
+  const supabase = createSupabaseClient(c.env);
+  const limited = await enforceRateLimit(supabase, c, 'profile-media', RATE_LIMITS.profileMedia.limit, RATE_LIMITS.profileMedia.windowSeconds);
   if (limited) return limited;
   await next();
 });
@@ -721,6 +729,89 @@ app.delete('/api/library/:id', authenticateUser, async (c) => {
     return c.json({ success: true });
   } catch {
     return c.json({ error: 'Failed to delete library item' }, 500);
+  }
+});
+
+const PROFILE_MEDIA_MAX_BYTES = 5 * 1024 * 1024;
+const PROFILE_MEDIA_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const PROFILE_MEDIA_SLOTS = new Set(['avatar', 'personal-plan', 'groups', 'disciples']);
+
+function profileMediaExtension(contentType: string): string {
+  return contentType === 'image/jpeg' ? 'jpg' : contentType === 'image/png' ? 'png' : 'webp';
+}
+
+function isSafeProfileMediaPath(value: unknown, userId: string, allowAdmin: boolean, profile: any): value is string {
+  if (typeof value !== 'string' || value.length > 300 || value.includes('..') || value.includes('\\') || value.startsWith('/')) return false;
+  const parts = value.split('/');
+  if (parts.length !== 3 || parts[0] !== userId || !PROFILE_MEDIA_SLOTS.has(parts[1])) return false;
+  if (!/^[a-f0-9-]{36}\.(jpg|png|webp)$/.test(parts[2])) return false;
+  return allowAdmin || parts[0] === profile.id;
+}
+
+app.post('/api/profile-media/upload', authenticateUser, async (c) => {
+  try {
+    const user = c.get('user');
+    const body = await c.req.parseBody();
+    const slot = typeof body.slot === 'string' ? body.slot : '';
+    const file = body.file;
+    if (!PROFILE_MEDIA_SLOTS.has(slot) || !(file instanceof File)) {
+      return c.json({ error: 'Invalid profile media upload', code: 'profile_media_invalid_upload' }, 400);
+    }
+    if (file.size <= 0 || file.size > PROFILE_MEDIA_MAX_BYTES) {
+      return c.json({ error: 'Profile image is too large', code: 'profile_media_too_large' }, 413);
+    }
+    const contentType = String(file.type || '').toLowerCase();
+    if (!PROFILE_MEDIA_TYPES.has(contentType)) {
+      return c.json({ error: 'Unsupported profile image type', code: 'profile_media_invalid_type' }, 400);
+    }
+    const path = `${user.id}/${slot}/${crypto.randomUUID()}.${profileMediaExtension(contentType)}`;
+    const supabase = createSupabaseClient(c.env);
+    const { error } = await supabase.storage.from('profile-media').upload(path, await file.arrayBuffer(), {
+      contentType,
+      cacheControl: '3600',
+      upsert: false,
+    });
+    if (error) throw error;
+    await writeAuditLog(supabase, c, user.id, 'upload_profile_media', 'profile_media', path, { slot, size_bytes: file.size, content_type: contentType });
+    return c.json({ path, slot });
+  } catch (error: any) {
+    return c.json({ error: error?.message || 'Failed to upload profile image', code: 'profile_media_upload_failed' }, 500);
+  }
+});
+
+app.post('/api/profile-media/sign', authenticateUser, async (c) => {
+  try {
+    const user = c.get('user');
+    const body = await c.req.json();
+    const path = body?.path;
+    const isAdmin = user.role === 'admin' || user.role === 'super_admin';
+    if (!isSafeProfileMediaPath(path, user.id, isAdmin, user)) {
+      return c.json({ error: 'Profile image not found', code: 'profile_media_not_found' }, 404);
+    }
+    const supabase = createSupabaseClient(c.env);
+    const { data, error } = await supabase.storage.from('profile-media').createSignedUrl(path, 3600);
+    if (error || !data?.signedUrl) return c.json({ error: 'Profile image not found', code: 'profile_media_not_found' }, 404);
+    return c.json({ signedUrl: data.signedUrl, expiresIn: 3600 });
+  } catch {
+    return c.json({ error: 'Failed to create profile image URL', code: 'profile_media_sign_failed' }, 500);
+  }
+});
+
+app.delete('/api/profile-media', authenticateUser, async (c) => {
+  try {
+    const user = c.get('user');
+    const body = await c.req.json();
+    const path = body?.path;
+    if (!isSafeProfileMediaPath(path, user.id, false, user)) {
+      return c.json({ error: 'Profile image not found', code: 'profile_media_not_found' }, 404);
+    }
+    const supabase = createSupabaseClient(c.env);
+    const { error } = await supabase.storage.from('profile-media').remove([path]);
+    if (error) throw error;
+    await writeAuditLog(supabase, c, user.id, 'delete_profile_media', 'profile_media', path);
+    return c.json({ success: true });
+  } catch (error: any) {
+    return c.json({ error: error?.message || 'Failed to delete profile image', code: 'profile_media_delete_failed' }, 500);
   }
 });
 
