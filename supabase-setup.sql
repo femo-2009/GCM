@@ -4,7 +4,9 @@
 -- Run this script in: Supabase Dashboard → SQL Editor
 -- ============================================================
 
--- 1. Enable required extensions
+-- ============================================================
+-- 1. REQUIRED EXTENSIONS
+-- ============================================================
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
@@ -83,7 +85,30 @@ AS $function$
 $function$;
 
 -- ============================================================
--- 6. AUTO-CREATE USER PROFILE AFTER SIGN-UP
+-- 6. LIBRARY EDITOR CHECK FUNCTION
+-- ============================================================
+
+CREATE OR REPLACE FUNCTION public.can_edit_library()
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $function$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.user_profiles
+    WHERE id = auth.uid()
+      AND status = 'approved'
+      AND (
+        role = 'super_admin'
+        OR 'edit_library' = ANY (permissions)
+      )
+  );
+$function$;
+
+-- ============================================================
+-- 7. AUTO-CREATE USER PROFILE AFTER SIGN-UP
 -- ============================================================
 
 CREATE OR REPLACE FUNCTION public.handle_new_user()
@@ -110,9 +135,14 @@ BEGIN
   ON CONFLICT (id) DO NOTHING;
 
   RETURN NEW;
+
 EXCEPTION
   WHEN OTHERS THEN
-    RAISE WARNING 'handle_new_user failed for user %: %', NEW.id, SQLERRM;
+    RAISE WARNING
+      'handle_new_user failed for user %: %',
+      NEW.id,
+      SQLERRM;
+
     RETURN NEW;
 END;
 $function$;
@@ -126,7 +156,7 @@ FOR EACH ROW
 EXECUTE FUNCTION public.handle_new_user();
 
 -- ============================================================
--- 7. UPDATED_AT FUNCTIONS AND TRIGGERS
+-- 8. UPDATED_AT FUNCTION AND TRIGGERS
 -- ============================================================
 
 CREATE OR REPLACE FUNCTION public.set_updated_at()
@@ -156,14 +186,14 @@ FOR EACH ROW
 EXECUTE FUNCTION public.set_updated_at();
 
 -- ============================================================
--- 8. ENABLE ROW LEVEL SECURITY
+-- 9. ENABLE ROW LEVEL SECURITY
 -- ============================================================
 
 ALTER TABLE public.app_data ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;
 
 -- ============================================================
--- 9. APP_DATA POLICIES
+-- 10. APP_DATA POLICIES
 -- ============================================================
 
 DROP POLICY IF EXISTS "Authenticated users can read app_data"
@@ -191,29 +221,39 @@ CREATE POLICY "Approved users can read app_data"
 ON public.app_data
 FOR SELECT
 TO authenticated
-USING (public.is_approved_user());
+USING (
+  public.is_approved_user()
+);
 
 CREATE POLICY "Approved admins can insert app_data"
 ON public.app_data
 FOR INSERT
 TO authenticated
-WITH CHECK (public.is_approved_admin());
+WITH CHECK (
+  public.is_approved_admin()
+);
 
 CREATE POLICY "Approved admins can update app_data"
 ON public.app_data
 FOR UPDATE
 TO authenticated
-USING (public.is_approved_admin())
-WITH CHECK (public.is_approved_admin());
+USING (
+  public.is_approved_admin()
+)
+WITH CHECK (
+  public.is_approved_admin()
+);
 
 CREATE POLICY "Approved admins can delete app_data"
 ON public.app_data
 FOR DELETE
 TO authenticated
-USING (public.is_approved_admin());
+USING (
+  public.is_approved_admin()
+);
 
 -- ============================================================
--- 10. USER_PROFILES POLICIES
+-- 11. USER_PROFILES POLICIES
 -- ============================================================
 
 DROP POLICY IF EXISTS "Authenticated users can read profiles"
@@ -241,22 +281,26 @@ CREATE POLICY "Users can read own profile"
 ON public.user_profiles
 FOR SELECT
 TO authenticated
-USING (id = auth.uid());
+USING (
+  id = auth.uid()
+);
 
 CREATE POLICY "Approved admins can read all profiles"
 ON public.user_profiles
 FOR SELECT
 TO authenticated
-USING (public.is_approved_admin());
+USING (
+  public.is_approved_admin()
+);
 
 -- There are intentionally no INSERT, UPDATE, DELETE,
 -- or ALL policies for anon or authenticated users.
 --
 -- New profiles are created by the SECURITY DEFINER trigger.
--- Administrative profile changes are handled by the protected server.
+-- Administrative profile changes are performed by the protected server.
 
 -- ============================================================
--- 11. REMOVE EXCESSIVE DIRECT USER_PROFILES PRIVILEGES
+-- 12. REMOVE EXCESSIVE USER_PROFILES PRIVILEGES
 -- ============================================================
 
 REVOKE ALL PRIVILEGES
@@ -272,7 +316,7 @@ ON TABLE public.user_profiles
 TO authenticated;
 
 -- ============================================================
--- 12. REMOVE EXCESSIVE DIRECT APP_DATA PRIVILEGES
+-- 13. REMOVE EXCESSIVE APP_DATA PRIVILEGES
 -- ============================================================
 
 REVOKE ALL PRIVILEGES
@@ -288,7 +332,7 @@ ON TABLE public.app_data
 TO authenticated;
 
 -- ============================================================
--- 13. RESTRICT FUNCTION EXECUTION
+-- 14. FUNCTION EXECUTION PRIVILEGES
 -- ============================================================
 
 REVOKE EXECUTE
@@ -315,67 +359,140 @@ GRANT EXECUTE
 ON FUNCTION public.is_approved_admin()
 TO authenticated;
 
+REVOKE EXECUTE
+ON FUNCTION public.can_edit_library()
+FROM PUBLIC;
+
+REVOKE EXECUTE
+ON FUNCTION public.can_edit_library()
+FROM anon;
+
+GRANT EXECUTE
+ON FUNCTION public.can_edit_library()
+TO authenticated;
+
 -- ============================================================
--- 14. STORAGE BUCKET
---
--- Storage policies will be hardened in a later security step.
+-- 15. PRIVATE STORAGE BUCKET
 -- ============================================================
 
 INSERT INTO storage.buckets (
   id,
   name,
   public,
-  file_size_limit
+  file_size_limit,
+  allowed_mime_types
 )
 VALUES (
   'media',
   'media',
-  true,
-  2147483648
+  false,
+  2147483648,
+  ARRAY[
+    'image/jpeg',
+    'image/png',
+    'image/gif',
+    'image/webp',
+    'video/mp4',
+    'video/webm',
+    'video/quicktime',
+    'application/octet-stream'
+  ]::text[]
 )
 ON CONFLICT (id)
 DO UPDATE SET
-  public = true,
-  file_size_limit = 2147483648;
+  public = false,
+  file_size_limit = 2147483648,
+  allowed_mime_types = ARRAY[
+    'image/jpeg',
+    'image/png',
+    'image/gif',
+    'image/webp',
+    'video/mp4',
+    'video/webm',
+    'video/quicktime',
+    'application/octet-stream'
+  ]::text[];
+
+-- ============================================================
+-- 16. STORAGE POLICIES
+-- ============================================================
 
 DROP POLICY IF EXISTS "Authenticated users can upload media"
 ON storage.objects;
 
-CREATE POLICY "Authenticated users can upload media"
-ON storage.objects
-FOR INSERT
-TO authenticated
-WITH CHECK (bucket_id = 'media');
-
 DROP POLICY IF EXISTS "Public can read media"
 ON storage.objects;
-
-CREATE POLICY "Public can read media"
-ON storage.objects
-FOR SELECT
-TO public
-USING (bucket_id = 'media');
 
 DROP POLICY IF EXISTS "Authenticated users can update media"
 ON storage.objects;
 
-CREATE POLICY "Authenticated users can update media"
-ON storage.objects
-FOR UPDATE
-TO authenticated
-USING (bucket_id = 'media');
-
 DROP POLICY IF EXISTS "Authenticated users can delete media"
 ON storage.objects;
 
-CREATE POLICY "Authenticated users can delete media"
+DROP POLICY IF EXISTS "media_select_approved_users"
+ON storage.objects;
+
+DROP POLICY IF EXISTS "media_insert_library_editors"
+ON storage.objects;
+
+DROP POLICY IF EXISTS "media_update_library_editors"
+ON storage.objects;
+
+DROP POLICY IF EXISTS "media_delete_library_editors"
+ON storage.objects;
+
+CREATE POLICY "media_select_approved_users"
+ON storage.objects
+FOR SELECT
+TO authenticated
+USING (
+  bucket_id = 'media'
+  AND public.is_approved_user()
+);
+
+CREATE POLICY "media_insert_library_editors"
+ON storage.objects
+FOR INSERT
+TO authenticated
+WITH CHECK (
+  bucket_id = 'media'
+  AND public.can_edit_library()
+);
+
+CREATE POLICY "media_update_library_editors"
+ON storage.objects
+FOR UPDATE
+TO authenticated
+USING (
+  bucket_id = 'media'
+  AND public.can_edit_library()
+)
+WITH CHECK (
+  bucket_id = 'media'
+  AND public.can_edit_library()
+);
+
+CREATE POLICY "media_delete_library_editors"
 ON storage.objects
 FOR DELETE
 TO authenticated
-USING (bucket_id = 'media');
+USING (
+  bucket_id = 'media'
+  AND public.can_edit_library()
+);
+
+-- Do not remove SELECT, INSERT, UPDATE, or DELETE
+-- from authenticated on storage.objects.
+--
+-- The frontend uploads directly through Supabase Storage.
+-- Storage RLS Policies above control the actual access.
+--
+-- Supabase may keep base privileges on storage.objects.
+-- The absence of anon Policies and the private Bucket
+-- are the important security controls.
 
 -- ============================================================
--- 15. INITIAL APP DATA
+-- 17. INITIAL APP DATA
 -- ============================================================
 
 INSERT INTO public.app_data (
@@ -400,7 +517,7 @@ VALUES (
 ON CONFLICT (key) DO NOTHING;
 
 -- ============================================================
--- 16. MANUAL SUPER ADMIN SETUP
+-- 18. MANUAL SUPER ADMIN SETUP
 --
 -- Replace YOUR_EMAIL with your real email only when needed.
 -- Run this command manually and only for your own account.
