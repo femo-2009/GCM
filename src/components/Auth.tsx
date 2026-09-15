@@ -255,6 +255,8 @@ export default function Auth({ lang, setLang, onAuthSuccess }: AuthProps) {
         setError(t.weakPassword);
       } else if (err.code === "signup_failed") {
         setError(t.signupFailed);
+      } else if (err.code === "rate_limited") {
+        setError(t.rateLimited);
       } else {
         setError(err.message || t.unexpectedError);
       }
