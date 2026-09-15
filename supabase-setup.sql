@@ -531,12 +531,7 @@ VALUES (
   ARRAY[
     'image/jpeg',
     'image/png',
-    'image/gif',
-    'image/webp',
-    'video/mp4',
-    'video/webm',
-    'video/quicktime',
-    'application/octet-stream'
+    'image/webp'
   ]::text[]
 )
 ON CONFLICT (id)
@@ -546,12 +541,7 @@ DO UPDATE SET
   allowed_mime_types = ARRAY[
     'image/jpeg',
     'image/png',
-    'image/gif',
-    'image/webp',
-    'video/mp4',
-    'video/webm',
-    'video/quicktime',
-    'application/octet-stream'
+    'image/webp'
   ]::text[];
 
 -- ============================================================
