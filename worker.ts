@@ -650,8 +650,14 @@ app.post('/api/library', authenticateUser, async (c) => {
       await writeAuditLog(supabase, c, user.id, 'update_media', 'video', mediaId, { fields: ['title', 'description'] });
       return c.json({ id: updated.id, type: updated.type, title: updated.title, description: updated.description, url: updated.file_url || '' });
     }
-    if (!url) return c.json({ error: 'A file upload or external URL is required' }, 400);
-    const { data: created } = await supabase.from('videos').insert({ type, title, description, file_url: url, status: 'ready' }).select().single();
+    if (!url) return c.json({ error: 'A YouTube URL is required', code: 'youtube_only' }, 400);
+    if (type !== 'video' || !isAllowedYouTubeUrl(url)) {
+      return c.json({ error: 'Only valid HTTPS YouTube URLs are allowed', code: 'youtube_only' }, 400);
+    }
+    const { data: created } = await supabase.from('videos').insert({
+      type: 'video', title, description, file_url: url.trim(), storage_path: null,
+      size_bytes: 0, mime_type: 'video/youtube', status: 'ready',
+    }).select().single();
     await writeAuditLog(supabase, c, user.id, 'create_external_media', 'video', created.id, { media_type: type });
     return c.json({ id: created.id, type: created.type, title: created.title, description: created.description, url: created.file_url || '' }, 201);
   } catch {
@@ -677,7 +683,12 @@ app.put('/api/library/:id', authenticateUser, async (c) => {
       return c.json({ id, type: 'text', title, description, url: '' });
     }
     const updateFields: Record<string, string> = { title, description };
-    if (url) updateFields.file_url = url;
+    if (url) {
+      if (!isAllowedYouTubeUrl(url)) {
+        return c.json({ error: 'Only valid HTTPS YouTube URLs are allowed', code: 'youtube_only' }, 400);
+      }
+      updateFields.file_url = url.trim();
+    }
     const { data: updated } = await supabase.from('videos').update(updateFields).eq('id', id).select().single();
     await writeAuditLog(supabase, c, user.id, 'update_media', 'video', id, { fields: Object.keys(updateFields) });
     return c.json({ id: updated.id, type: updated.type, title: updated.title, description: updated.description, url: updated.file_url || '' });
@@ -776,6 +787,26 @@ app.post('/api/profile/groups', authenticateUser, async (c) => {
   }
 });
 
+function isAllowedYouTubeUrl(value: unknown): boolean {
+  if (typeof value !== 'string') return false;
+  try {
+    const url = new URL(value.trim());
+    if (url.protocol !== 'https:') return false;
+    const hostname = url.hostname.toLowerCase().replace(/^www\./, '');
+    if (hostname === 'youtu.be') {
+      return /^[a-zA-Z0-9_-]{11}$/.test(url.pathname.slice(1));
+    }
+    if (hostname !== 'youtube.com' && hostname !== 'm.youtube.com') return false;
+    if (url.pathname === '/watch') {
+      return /^[a-zA-Z0-9_-]{11}$/.test(url.searchParams.get('v') || '');
+    }
+    const match = url.pathname.match(/^\/embed\/([a-zA-Z0-9_-]{11})$/);
+    return Boolean(match);
+  } catch {
+    return false;
+  }
+}
+
 const MAX_MEDIA_BYTES = 2 * 1024 * 1024 * 1024;
 const ALLOWED_MEDIA_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'video/mp4', 'video/webm', 'video/quicktime']);
 
@@ -794,7 +825,10 @@ app.post('/api/videos/register', authenticateUser, async (c) => {
     }
     const supabase = createSupabaseClient(c.env);
     const { title, description, fileName, mimeType, sizeBytes, storagePath, parts, type } = await c.req.json();
-    const mediaType = type === 'photo' ? 'photo' : 'video';
+    if (type !== 'photo') {
+      return c.json({ error: 'Direct video uploads are disabled. Use a YouTube URL.', code: 'youtube_only' }, 410);
+    }
+    const mediaType = 'photo';
     const normalizedMime = String(mimeType || '').toLowerCase();
     const normalizedSize = Number(sizeBytes || 0);
     if (!title || String(title).length > 200 || String(description || '').length > 5000) {
