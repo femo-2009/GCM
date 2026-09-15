@@ -110,6 +110,19 @@ export default function AdminPanelView({ lang, user }: AdminPanelViewProps) {
     });
   };
 
+  const handleExecuteMediaMigration = async () => {
+    if (!confirm(t.profileMediaMigrationConfirm)) return;
+    await withLoading(async () => {
+      try {
+        const payload = await adminRequest('/api/admin/profile-media/migrate', { dryRun: false });
+        setMediaMigrationPreview([]);
+        alert(`${t.profileMediaMigrationCompleted}: ${payload.migrated || 0}`);
+      } catch (error: any) {
+        alert(error.message || t.profileMediaMigrationFailed);
+      }
+    });
+  };
+
   const handleApprove = async (id: string) => {
     await withLoading(async () => {
       await adminRequest(`/api/admin/users/${id}/approve`);
@@ -216,6 +229,13 @@ export default function AdminPanelView({ lang, user }: AdminPanelViewProps) {
               className="shrink-0 rounded-xl bg-indigo-600 px-3 py-2 text-xs font-bold text-white hover:bg-indigo-700 cursor-pointer"
             >
               {t.profileMediaMigrationPreview}
+            </button>
+            <button
+              type="button"
+              onClick={handleExecuteMediaMigration}
+              className="shrink-0 rounded-xl border border-red-300 bg-white px-3 py-2 text-xs font-bold text-red-700 hover:bg-red-50 cursor-pointer"
+            >
+              {t.profileMediaMigrationExecute}
             </button>
           </div>
           {mediaMigrationPreview !== null && (
