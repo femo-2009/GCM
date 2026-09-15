@@ -5,6 +5,7 @@ import { Language, translations } from '../translations';
 import { User, Disciple, UserGroup } from '../types';
 import { supabase } from '../lib/supabase';
 import { useLoading } from '../lib/LoadingContext';
+import { uploadProfileMedia } from '../lib/profileMedia';
 
 interface GCMViewProps {
   lang: Language;
@@ -54,32 +55,25 @@ export default function GCMView({ lang, user, onUserUpdate }: GCMViewProps) {
     if (!file) return;
 
     setLoading(true);
-    const reader = new FileReader();
-    reader.onloadend = async () => {
-      const base64 = reader.result as string;
-      try {
-        const res = await fetch('/api/profile/update', {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`
-          },
-          body: JSON.stringify({ userId: user.id, photo: base64 }),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          onUserUpdate(data.user);
-        } else {
-          const errorText = await res.text();
-          console.error('Profile photo upload failed:', errorText);
-        }
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    reader.readAsDataURL(file);
+    try {
+      const path = await uploadProfileMedia(file, 'avatar', t.profileMediaUploadFailed);
+      const res = await fetch('/api/profile/update', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`
+        },
+        body: JSON.stringify({ userId: user.id, photo: path }),
+      });
+      if (!res.ok) throw new Error(t.profileMediaUploadFailed);
+      const data = await res.json();
+      onUserUpdate(data.user);
+    } catch (err: any) {
+      console.error(err);
+      alert(err.message || t.profileMediaUploadFailed);
+    } finally {
+      setLoading(false);
+    }
   };
 
   // 2. Persistent Counts (+/-) updates
@@ -152,7 +146,7 @@ export default function GCMView({ lang, user, onUserUpdate }: GCMViewProps) {
           body: JSON.stringify({
             userId: user.id,
             personalPlan: {
-              photo: planPhoto,
+              ...(planPhoto ? { photo: planPhoto } : {}),
               text: planText
             }
           }),
@@ -204,7 +198,7 @@ export default function GCMView({ lang, user, onUserUpdate }: GCMViewProps) {
             discipleId: isEdit ? editingDisciple.id : undefined,
             name: discipleName,
             description: discipleDesc,
-            photo: disciplePhoto
+            ...(disciplePhoto ? { photo: disciplePhoto } : {})
           })
         });
 
@@ -288,16 +282,21 @@ export default function GCMView({ lang, user, onUserUpdate }: GCMViewProps) {
   };
 
   // Helper reader
-  const handlePhotoRead = (e: React.ChangeEvent<HTMLInputElement>, setPhoto: (v: string) => void, setPreview: (v: string) => void) => {
+  const handlePhotoRead = async (e: React.ChangeEvent<HTMLInputElement>, setPhoto: (v: string) => void, setPreview: (v: string) => void, slot: 'personal-plan' | 'groups' | 'disciples') => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64 = reader.result as string;
-        setPhoto(base64);
-        setPreview(base64);
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
+    setPreview(URL.createObjectURL(file));
+    setLoading(true);
+    try {
+      const path = await uploadProfileMedia(file, slot, t.profileMediaUploadFailed);
+      setPhoto(path);
+    } catch (err: any) {
+      setPhoto('');
+      setPreview('');
+      alert(err.message || t.profileMediaUploadFailed);
+    } finally {
+      setLoading(false);
+      e.target.value = '';
     }
   };
 
@@ -321,7 +320,7 @@ export default function GCMView({ lang, user, onUserUpdate }: GCMViewProps) {
             groupId: isEdit ? editingGroup.id : undefined,
             title: groupTitle,
             description: groupDesc,
-            photo: groupPhoto,
+            ...(groupPhoto ? { photo: groupPhoto } : {}),
             memberIds: selectedMemberIds
           })
         });
@@ -655,7 +654,7 @@ export default function GCMView({ lang, user, onUserUpdate }: GCMViewProps) {
                         type="file" 
                         accept="image/*" 
                         className="hidden" 
-                        onChange={(e) => handlePhotoRead(e, setPlanPhoto, setPlanPhotoPreview)} 
+                        onChange={(e) => handlePhotoRead(e, setPlanPhoto, setPlanPhotoPreview, 'personal-plan')} 
                       />
                     </label>
                   </div>
@@ -766,7 +765,7 @@ export default function GCMView({ lang, user, onUserUpdate }: GCMViewProps) {
                             type="file" 
                             accept="image/*" 
                             className="hidden" 
-                            onChange={(e) => handlePhotoRead(e, setDisciplePhoto, setDisciplePhotoPreview)} 
+                            onChange={(e) => handlePhotoRead(e, setDisciplePhoto, setDisciplePhotoPreview, 'disciples')} 
                           />
                         </label>
                       </div>
@@ -930,7 +929,7 @@ export default function GCMView({ lang, user, onUserUpdate }: GCMViewProps) {
                             type="file" 
                             accept="image/*" 
                             className="hidden" 
-                            onChange={(e) => handlePhotoRead(e, setGroupPhoto, setGroupPhotoPreview)} 
+                            onChange={(e) => handlePhotoRead(e, setGroupPhoto, setGroupPhotoPreview, 'groups')} 
                           />
                         </label>
                       </div>
