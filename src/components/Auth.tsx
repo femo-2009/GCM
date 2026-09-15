@@ -9,6 +9,7 @@ import {
   LogIn,
   UserPlus,
   User as UserIcon,
+  ShieldCheck,
 } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { fetchProfileFromApi, signUpWithApproval } from "../lib/authApi";
@@ -29,8 +30,14 @@ export default function Auth({ lang, setLang, onAuthSuccess }: AuthProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [otp, setOtp] = useState("");
   const [authStatus, setAuthStatus] = useState<
-    "idle" | "pending" | "blocked" | "registered" | "verifyEmail"
+    "idle" | "pending" | "blocked" | "registered" | "verifyEmail" | "mfaSetup" | "mfaChallenge"
   >("idle");
+  const [mfaFactorId, setMfaFactorId] = useState<string>("");
+  const [mfaChallengeId, setMfaChallengeId] = useState<string>("");
+  const [mfaQrCode, setMfaQrCode] = useState<string>("");
+  const [mfaSecret, setMfaSecret] = useState<string>("");
+  const [mfaCode, setMfaCode] = useState<string>("");
+  const [mfaUser, setMfaUser] = useState<User | null>(null);
 
   const [formData, setFormData] = useState({
     email: "",
@@ -46,6 +53,98 @@ export default function Auth({ lang, setLang, onAuthSuccess }: AuthProps) {
 
   const t = translations[lang];
   const dir = lang === "ar" ? "rtl" : "ltr";
+
+  const continueWithMfa = async (authenticatedUser: User) => {
+    const isAdmin = authenticatedUser.role === "admin" || authenticatedUser.role === "super_admin";
+    if (!isAdmin) {
+      onAuthSuccess(authenticatedUser);
+      return;
+    }
+
+    const { data, error } = await supabase.auth.mfa.listFactors();
+    if (error) throw error;
+
+    const verifiedFactor = data.totp.find((factor) => factor.status === "verified");
+    setMfaUser(authenticatedUser);
+
+    if (verifiedFactor) {
+      const { data: challenge, error: challengeError } = await supabase.auth.mfa.challenge({
+        factorId: verifiedFactor.id,
+      });
+      if (challengeError) throw challengeError;
+      setMfaFactorId(verifiedFactor.id);
+      setMfaChallengeId(challenge.id);
+      setMfaCode("");
+      setAuthStatus("mfaChallenge");
+      return;
+    }
+
+    const { data: enrollment, error: enrollmentError } = await supabase.auth.mfa.enroll({
+      factorType: "totp",
+      friendlyName: "GCM Admin Authenticator",
+    });
+    if (enrollmentError) throw enrollmentError;
+
+    setMfaFactorId(enrollment.id);
+    setMfaQrCode(enrollment.totp.qr_code);
+    setMfaSecret(enrollment.totp.secret);
+    setMfaCode("");
+    setAuthStatus("mfaSetup");
+  };
+
+  const handleVerifyMfa = async () => {
+    if (!mfaFactorId || !mfaChallengeId || mfaCode.trim().length !== 6 || !mfaUser) {
+      setError(t.mfaInvalidCode);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    try {
+      const { error } = await supabase.auth.mfa.verify({
+        factorId: mfaFactorId,
+        challengeId: mfaChallengeId,
+        code: mfaCode.trim(),
+      });
+      if (error) throw error;
+      setAuthStatus("idle");
+      onAuthSuccess(mfaUser);
+    } catch (err: any) {
+      setError(err.message || t.mfaInvalidCode);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleStartMfaSetup = async () => {
+    if (!mfaFactorId || !mfaUser || mfaCode.trim().length !== 6) {
+      setError(t.mfaInvalidCode);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    try {
+      const { data: challenge, error: challengeError } = await supabase.auth.mfa.challenge({
+        factorId: mfaFactorId,
+      });
+      if (challengeError) throw challengeError;
+      setMfaChallengeId(challenge.id);
+
+      const { error: verifyError } = await supabase.auth.mfa.verify({
+        factorId: mfaFactorId,
+        challengeId: challenge.id,
+        code: mfaCode.trim(),
+      });
+      if (verifyError) throw verifyError;
+      setAuthStatus("idle");
+      onAuthSuccess(mfaUser);
+    } catch (err: any) {
+      setError(err.message || t.mfaSetupError);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Restore the email-verification screen after the user closes and reopens the site.
   useEffect(() => {
@@ -65,7 +164,7 @@ export default function Auth({ lang, setLang, onAuthSuccess }: AuthProps) {
       try {
         const authenticatedUser = await fetchProfileFromApi(session.access_token);
         if (authenticatedUser.status === "approved") {
-          onAuthSuccess(authenticatedUser);
+          await continueWithMfa(authenticatedUser);
         } else if (authenticatedUser.status === "blocked") {
           await supabase.auth.signOut();
           setAuthStatus("blocked");
@@ -122,7 +221,7 @@ export default function Auth({ lang, setLang, onAuthSuccess }: AuthProps) {
       window.localStorage.removeItem("gcm_pending_verification_email");
       const authenticatedUser = await fetchProfileFromApi(accessToken);
       if (authenticatedUser.status === "approved") {
-        onAuthSuccess(authenticatedUser);
+        await continueWithMfa(authenticatedUser);
       } else if (authenticatedUser.status === "blocked") {
         await supabase.auth.signOut();
         setAuthStatus("blocked");
@@ -191,7 +290,7 @@ export default function Auth({ lang, setLang, onAuthSuccess }: AuthProps) {
         // Anything else (pending, blocked, or an unexpected/corrupted value) is
         // treated as not-yet-approved so we fail closed, not open.
         if (authenticatedUser.status === "approved") {
-          onAuthSuccess(authenticatedUser);
+          await continueWithMfa(authenticatedUser);
         } else if (authenticatedUser.status === "blocked") {
           await supabase.auth.signOut();
           setAuthStatus("blocked");
@@ -264,6 +363,50 @@ export default function Auth({ lang, setLang, onAuthSuccess }: AuthProps) {
       setLoading(false);
     }
   };
+
+  if (authStatus === "mfaSetup" || authStatus === "mfaChallenge") {
+    const isSetup = authStatus === "mfaSetup";
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6" style={{ direction: dir }}>
+        <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white border border-slate-200 rounded-3xl shadow-2xl w-full max-w-md p-8 text-center">
+          <div className="w-16 h-16 mx-auto rounded-full bg-indigo-50 border-2 border-indigo-200 flex items-center justify-center mb-5">
+            <ShieldCheck className="w-8 h-8 text-indigo-600" />
+          </div>
+          <h2 className="text-2xl font-extrabold text-slate-900 mb-3">
+            {isSetup ? t.mfaSetupTitle : t.mfaChallengeTitle}
+          </h2>
+          <p className="text-slate-500 text-sm leading-relaxed mb-6">
+            {isSetup ? t.mfaSetupMessage : t.mfaChallengeMessage}
+          </p>
+          {isSetup && mfaQrCode && (
+            <div className="mb-5">
+              <img src={mfaQrCode} alt="TOTP QR code" className="w-52 h-52 mx-auto border border-slate-200 rounded-xl" />
+              <p className="text-[11px] text-slate-500 mt-3 break-all">{t.mfaSecret}: {mfaSecret}</p>
+            </div>
+          )}
+          <input
+            value={mfaCode}
+            onChange={(event) => setMfaCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            maxLength={6}
+            placeholder={t.mfaCodePlaceholder}
+            className="w-full text-center tracking-[0.45em] bg-slate-50 border border-slate-200 rounded-xl px-3 py-3 text-lg font-bold text-slate-900 focus:outline-none focus:border-indigo-500"
+            dir="ltr"
+          />
+          {error && <p className="bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl px-4 py-3 mt-4">{error}</p>}
+          <button
+            type="button"
+            onClick={isSetup ? handleStartMfaSetup : handleVerifyMfa}
+            disabled={loading || mfaCode.length !== 6}
+            className="w-full py-3 mt-5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold rounded-xl transition-colors text-sm"
+          >
+            {loading ? t.verifying : isSetup ? t.mfaEnableButton : t.mfaVerifyButton}
+          </button>
+        </motion.div>
+      </div>
+    );
+  }
 
   // --- STATUS SCREENS (email verification / pending / blocked) ---
   if (authStatus !== "idle") {
