@@ -619,14 +619,17 @@ app.post('/api/library', authenticateUser, async (c) => {
       const appData = await getAppData(supabase);
       const newItem = { id: `lib-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`, type, title, description, url: '' };
       await saveAppData(supabase, { ...appData, library: [...(appData.library || []), newItem] });
+      await writeAuditLog(supabase, c, user.id, 'create_library_item', 'library_item', newItem.id, { item_type: 'text' });
       return c.json(newItem, 201);
     }
     if (mediaId) {
       const { data: updated } = await supabase.from('videos').update({ title, description }).eq('id', mediaId).select().single();
+      await writeAuditLog(supabase, c, user.id, 'update_media', 'video', mediaId, { fields: ['title', 'description'] });
       return c.json({ id: updated.id, type: updated.type, title: updated.title, description: updated.description, url: updated.file_url || '' });
     }
     if (!url) return c.json({ error: 'A file upload or external URL is required' }, 400);
     const { data: created } = await supabase.from('videos').insert({ type, title, description, file_url: url, status: 'ready' }).select().single();
+    await writeAuditLog(supabase, c, user.id, 'create_external_media', 'video', created.id, { media_type: type });
     return c.json({ id: created.id, type: created.type, title: created.title, description: created.description, url: created.file_url || '' }, 201);
   } catch {
     return c.json({ error: 'Failed to add library item' }, 500);
@@ -647,11 +650,13 @@ app.put('/api/library/:id', authenticateUser, async (c) => {
       const appData = await getAppData(supabase);
       const library = (appData.library || []).map((item: any) => item.id === id ? { ...item, title, description } : item);
       await saveAppData(supabase, { ...appData, library });
+      await writeAuditLog(supabase, c, user.id, 'update_library_item', 'library_item', id, { fields: ['title', 'description'] });
       return c.json({ id, type: 'text', title, description, url: '' });
     }
     const updateFields: Record<string, string> = { title, description };
     if (url) updateFields.file_url = url;
     const { data: updated } = await supabase.from('videos').update(updateFields).eq('id', id).select().single();
+    await writeAuditLog(supabase, c, user.id, 'update_media', 'video', id, { fields: Object.keys(updateFields) });
     return c.json({ id: updated.id, type: updated.type, title: updated.title, description: updated.description, url: updated.file_url || '' });
   } catch {
     return c.json({ error: 'Failed to update library item' }, 500);
@@ -669,11 +674,16 @@ app.delete('/api/library/:id', authenticateUser, async (c) => {
     if (id.startsWith('lib-')) {
       const appData = await getAppData(supabase);
       await saveAppData(supabase, { ...appData, library: (appData.library || []).filter((item: any) => item.id !== id) });
+      await writeAuditLog(supabase, c, user.id, 'delete_library_item', 'library_item', id);
       return c.json({ success: true });
     }
     const { data: mediaRow } = await supabase.from('videos').select('storage_path').eq('id', id).maybeSingle();
     await supabase.from('videos').delete().eq('id', id);
-    if (mediaRow?.storage_path) supabase.storage.from('media').remove([mediaRow.storage_path]);
+    if (mediaRow?.storage_path) {
+      const paths = (() => { try { const parsed = JSON.parse(mediaRow.storage_path); return Array.isArray(parsed) ? parsed : [mediaRow.storage_path]; } catch { return [mediaRow.storage_path]; } })();
+      await supabase.storage.from('media').remove(paths);
+    }
+    await writeAuditLog(supabase, c, user.id, 'delete_media', 'video', id);
     return c.json({ success: true });
   } catch {
     return c.json({ error: 'Failed to delete library item' }, 500);
@@ -794,6 +804,7 @@ app.post('/api/videos/register', authenticateUser, async (c) => {
     const streamUrl = `/api/videos/stream/${video.id}`;
     await supabase.from('videos').update({ file_url: streamUrl }).eq('id', video.id);
     video.file_url = streamUrl;
+    await writeAuditLog(supabase, c, user.id, 'upload_media', 'video', video.id, { media_type: mediaType, mime_type: normalizedMime, size_bytes: normalizedSize });
 
     return c.json({ success: true, publicUrl: streamUrl, video });
   } catch (err: any) {
