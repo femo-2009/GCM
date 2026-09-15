@@ -27,6 +27,20 @@ interface LibraryViewProps {
   user: User;
 }
 
+function isAllowedYouTubeUrl(value: string): boolean {
+  try {
+    const url = new URL(value.trim());
+    if (url.protocol !== 'https:') return false;
+    const hostname = url.hostname.toLowerCase().replace(/^www\./, '');
+    if (hostname === 'youtu.be') return /^[a-zA-Z0-9_-]{11}$/.test(url.pathname.slice(1));
+    if (hostname !== 'youtube.com' && hostname !== 'm.youtube.com') return false;
+    if (url.pathname === '/watch') return /^[a-zA-Z0-9_-]{11}$/.test(url.searchParams.get('v') || '');
+    return /^\/embed\/[a-zA-Z0-9_-]{11}$/.test(url.pathname);
+  } catch {
+    return false;
+  }
+}
+
 export default function LibraryView({ lang, user }: LibraryViewProps) {
   const { withLoading } = useLoading();
   const [items, setItems] = useState<LibraryItem[]>([]);
@@ -204,6 +218,10 @@ export default function LibraryView({ lang, user }: LibraryViewProps) {
 
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (addType === 'video') {
+      alert(lang === 'ar' ? 'الفيديوهات يجب أن تكون روابط YouTube فقط.' : 'Videos must use YouTube URLs only.');
+      return;
+    }
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -351,7 +369,11 @@ export default function LibraryView({ lang, user }: LibraryViewProps) {
         );
         return;
       }
-      if (!mediaFile && !externalUrl.trim()) {
+      if (addType === 'video' && !isAllowedYouTubeUrl(externalUrl)) {
+        alert(lang === 'ar' ? 'أدخل رابط YouTube صحيحًا وآمنًا.' : 'Enter a valid HTTPS YouTube URL.');
+        return;
+      }
+      if (addType === 'photo' && !mediaFile && !externalUrl.trim()) {
         alert(
           lang === "ar"
             ? "يرجى اختيار ملف أو إدخال رابط خارجي قبل الحفظ."
@@ -373,8 +395,8 @@ export default function LibraryView({ lang, user }: LibraryViewProps) {
             type: addType,
             title,
             description,
-            url: addType === "text" ? "" : mediaFile || externalUrl,
-            mediaId: addType !== "text" && mediaFile ? mediaId : undefined,
+            url: addType === "text" ? "" : addType === "video" ? externalUrl.trim() : mediaFile || externalUrl,
+            mediaId: addType === "photo" && mediaFile ? mediaId : undefined,
           }),
         });
 
@@ -890,86 +912,28 @@ export default function LibraryView({ lang, user }: LibraryViewProps) {
                       </p>
                     )}
 
-                    {/* Option 1: File Upload */}
-                    <div>
-                      <label className="block text-[11px] font-semibold text-slate-500 mb-1">
-                        {addType === "photo"
-                          ? lang === "ar"
-                            ? "تحميل صورة من جهازك"
-                            : "Upload photo from device"
-                          : lang === "ar"
-                            ? "تحميل فيديو من جهازك (يدعم الملفات الكبيرة)"
-                            : "Upload video from device (Large files supported)"}
-                      </label>
-
-                      <div className="flex items-center gap-3">
-                        {mediaFilePreview && addType === "photo" && (
-                          <img
-                            src={mediaFilePreview}
-                            className="w-10 h-10 object-cover rounded-lg border border-slate-200 bg-white"
-                          />
-                        )}
-                        <label className="px-3 py-2 bg-white hover:bg-slate-100 border border-slate-200 text-[11px] font-semibold text-slate-700 rounded-xl transition-colors cursor-pointer">
-                          <span>
-                            {lang === "ar" ? "اختر ملف" : "Choose File"}
-                          </span>
-                          <input
-                            type="file"
-                            accept={addType === "photo" ? "image/*" : "video/*"}
-                            className="hidden"
-                            onChange={handleFileUpload}
-                          />
-                        </label>
-                        {mediaFile && (
-                          <span className="text-[10px] text-green-600 truncate max-w-[150px] font-bold">
-                            ✓{" "}
-                            {lang === "ar"
-                              ? "تم اختيار الملف"
-                              : "File Selected"}
-                          </span>
-                        )}
-                        {uploading && (
-                          <span className="text-[10px] text-indigo-600 font-bold">
-                            {uploadProgress}%
-                          </span>
-                        )}
-                      </div>
-                      {uploading && (
-                        <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-indigo-600 transition-all"
-                            style={{ width: `${uploadProgress}%` }}
-                          />
+                    {addType === "photo" ? (
+                      <>
+                        <label className="block text-[11px] font-semibold text-slate-500 mb-1">{lang === "ar" ? "تحميل صورة من جهازك" : "Upload photo from device"}</label>
+                        <div className="flex items-center gap-3">
+                          {mediaFilePreview && <img src={mediaFilePreview} className="w-10 h-10 object-cover rounded-lg border border-slate-200 bg-white" />}
+                          <label className="px-3 py-2 bg-white hover:bg-slate-100 border border-slate-200 text-[11px] font-semibold text-slate-700 rounded-xl transition-colors cursor-pointer">
+                            <span>{lang === "ar" ? "اختر صورة" : "Choose Photo"}</span>
+                            <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handleFileUpload} />
+                          </label>
+                          {mediaFile && <span className="text-[10px] text-green-600 truncate max-w-[150px] font-bold">✓ {lang === "ar" ? "تم اختيار الصورة" : "Photo selected"}</span>}
+                          {uploading && <span className="text-[10px] text-indigo-600 font-bold">{uploadProgress}%</span>}
                         </div>
-                      )}
-                      {uploadMessage && (
-                        <p className="text-[10px] text-slate-500">
-                          {uploadMessage}
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="relative flex py-1 items-center">
-                      <div className="flex-grow border-t border-slate-200"></div>
-                      <span className="flex-shrink mx-3 text-[10px] text-slate-400 font-bold">
-                        {lang === "ar" ? "أو" : "OR"}
-                      </span>
-                      <div className="flex-grow border-t border-slate-200"></div>
-                    </div>
-
-                    {/* Option 2: External Link */}
-                    <div>
-                      <label className="block text-[11px] font-semibold text-slate-500 mb-1">
-                        {t.addLink}
-                      </label>
-                      <input
-                        type="url"
-                        value={externalUrl}
-                        onChange={(e) => setExternalUrl(e.target.value)}
-                        placeholder="https://example.com/media.mp4"
-                        className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-slate-900 focus:outline-none focus:border-indigo-600 text-xs font-sans"
-                      />
-                    </div>
+                        {uploading && <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden"><div className="h-full bg-indigo-600 transition-all" style={{ width: `${uploadProgress}%` }} /></div>}
+                        {uploadMessage && <p className="text-[10px] text-slate-500">{uploadMessage}</p>}
+                      </>
+                    ) : (
+                      <>
+                        <label className="block text-[11px] font-semibold text-slate-500 mb-1">{lang === "ar" ? "رابط فيديو YouTube" : "YouTube video URL"}</label>
+                        <input type="url" value={externalUrl} onChange={(e) => setExternalUrl(e.target.value)} placeholder="https://www.youtube.com/watch?v=..." required className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-slate-900 focus:outline-none focus:border-indigo-600 text-xs font-sans" />
+                        <p className="text-[10px] text-slate-400 mt-1">{lang === "ar" ? "يجب أن يكون الرابط HTTPS من YouTube فقط، ويمكن أن يكون Public أو Unlisted." : "Use an HTTPS YouTube URL only. Public and Unlisted videos are supported."}</p>
+                      </>
+                    )}
                   </div>
                 )}
 
