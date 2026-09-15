@@ -50,6 +50,7 @@ export default function Auth({ lang, setLang, onAuthSuccess }: AuthProps) {
   });
 
   const [photoPreview, setPhotoPreview] = useState("");
+  const [signupPhotoFile, setSignupPhotoFile] = useState<File | null>(null);
 
   const t = translations[lang];
   const dir = lang === "ar" ? "rtl" : "ltr";
@@ -163,6 +164,7 @@ export default function Auth({ lang, setLang, onAuthSuccess }: AuthProps) {
 
       try {
         const authenticatedUser = await fetchProfileFromApi(session.access_token);
+        await uploadPendingSignupAvatar();
         if (authenticatedUser.status === "approved") {
           await continueWithMfa(authenticatedUser);
         } else if (authenticatedUser.status === "blocked") {
@@ -195,6 +197,12 @@ export default function Auth({ lang, setLang, onAuthSuccess }: AuthProps) {
     setError(null);
   };
 
+  const uploadPendingSignupAvatar = async () => {
+    if (!signupPhotoFile) return;
+    await uploadProfileMedia(signupPhotoFile, 'avatar', t.profileMediaUploadFailed);
+    setSignupPhotoFile(null);
+  };
+
   const handleVerifyEmail = async () => {
     const email = formData.email.trim().toLowerCase();
     const token = otp.trim();
@@ -220,6 +228,7 @@ export default function Auth({ lang, setLang, onAuthSuccess }: AuthProps) {
 
       window.localStorage.removeItem("gcm_pending_verification_email");
       const authenticatedUser = await fetchProfileFromApi(accessToken);
+      await uploadPendingSignupAvatar();
       if (authenticatedUser.status === "approved") {
         await continueWithMfa(authenticatedUser);
       } else if (authenticatedUser.status === "blocked") {
@@ -331,7 +340,6 @@ export default function Auth({ lang, setLang, onAuthSuccess }: AuthProps) {
           firstName: formData.firstName.trim(),
           lastName: formData.lastName.trim(),
           phone: normalizedPhone,
-          photo: formData.photo || "",
         });
 
         window.localStorage.setItem("gcm_pending_verification_email", formData.email.trim().toLowerCase());
@@ -501,6 +509,7 @@ export default function Auth({ lang, setLang, onAuthSuccess }: AuthProps) {
                 photo: "",
               });
               setPhotoPreview("");
+              setSignupPhotoFile(null);
               setOtp("");
             }}
             className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition-colors text-sm cursor-pointer"
@@ -632,16 +641,15 @@ export default function Auth({ lang, setLang, onAuthSuccess }: AuthProps) {
                             onChange={(e) => {
                               const file = e.target.files?.[0];
                               if (file) {
-                                const reader = new FileReader();
-                                reader.onloadend = () => {
-                                  const base64 = reader.result as string;
-                                  setFormData((prev) => ({
-                                    ...prev,
-                                    photo: base64,
-                                  }));
-                                  setPhotoPreview(base64);
-                                };
-                                reader.readAsDataURL(file);
+                                if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) {
+                                  setError(t.profileMediaInvalidType);
+                                  e.target.value = '';
+                                  return;
+                                }
+                                setSignupPhotoFile(file);
+                                setPhotoPreview(URL.createObjectURL(file));
+                                setError(null);
+                                e.target.value = '';
                               }
                             }}
                           />
