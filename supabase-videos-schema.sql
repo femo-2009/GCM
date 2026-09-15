@@ -8,7 +8,7 @@ create table if not exists public.videos (
   file_name text,
   storage_path text,
   file_url text,
-  mime_type text default 'video/mp4',
+  mime_type text default 'video/youtube',
   size_bytes bigint default 0,
   duration_seconds integer default 0,
   status text not null default 'pending',
@@ -18,6 +18,54 @@ create table if not exists public.videos (
 
 -- Migration for existing databases created before the `type` column existed:
 alter table public.videos add column if not exists type text not null default 'video';
+alter table public.videos alter column storage_path drop not null;
+alter table public.videos alter column mime_type set default 'video/youtube';
+alter table public.videos drop constraint if exists videos_type_check;
+alter table public.videos add constraint videos_type_check check (type in ('photo', 'video'));
+
+-- YouTube-only media integrity constraints.
+-- Existing valid rows are preserved; invalid rows must be corrected before this block succeeds.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'videos_status_check' AND conrelid = 'public.videos'::regclass) THEN
+    ALTER TABLE public.videos ADD CONSTRAINT videos_status_check CHECK (status IN ('pending', 'ready', 'failed'));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'videos_title_length_check' AND conrelid = 'public.videos'::regclass) THEN
+    ALTER TABLE public.videos ADD CONSTRAINT videos_title_length_check CHECK (length(title) BETWEEN 1 AND 200);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'videos_description_length_check' AND conrelid = 'public.videos'::regclass) THEN
+    ALTER TABLE public.videos ADD CONSTRAINT videos_description_length_check CHECK (length(description) <= 5000);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'videos_nonnegative_numbers_check' AND conrelid = 'public.videos'::regclass) THEN
+    ALTER TABLE public.videos ADD CONSTRAINT videos_nonnegative_numbers_check CHECK (COALESCE(size_bytes, 0) >= 0 AND COALESCE(duration_seconds, 0) >= 0);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'videos_media_integrity_check' AND conrelid = 'public.videos'::regclass) THEN
+    ALTER TABLE public.videos ADD CONSTRAINT videos_media_integrity_check CHECK (
+      (
+        type = 'photo'
+        AND mime_type IN ('image/jpeg', 'image/png', 'image/webp')
+        AND storage_path IS NOT NULL
+        AND storage_path LIKE 'photos/%'
+        AND file_url IS NOT NULL
+        AND file_url LIKE '/api/videos/stream/%'
+      )
+      OR
+      (
+        type = 'video'
+        AND mime_type = 'video/youtube'
+        AND storage_path IS NULL
+        AND file_url IS NOT NULL
+        AND (
+          file_url ~* '^https://(www\.)?youtube\.com/watch\?v=[A-Za-z0-9_-]{11}([&].*)?$'
+          OR file_url ~* '^https://m\.youtube\.com/watch\?v=[A-Za-z0-9_-]{11}([&].*)?$'
+          OR file_url ~* '^https://youtu\.be/[A-Za-z0-9_-]{11}([?].*)?$'
+          OR file_url ~* '^https://(www\.)?youtube\.com/embed/[A-Za-z0-9_-]{11}$'
+        )
+      )
+    );
+  END IF;
+END
+$$;
 alter table public.videos alter column storage_path drop not null;
 alter table public.videos drop constraint if exists videos_type_check;
 alter table public.videos add constraint videos_type_check check (type in ('photo', 'video'));
@@ -36,40 +84,5 @@ before update on public.videos
 for each row
 execute function public.set_updated_at();
 
--- Storage bucket policy example (replace with your actual bucket name if needed)
--- This is the SQL pattern to use in Supabase SQL Editor:
---
--- create policy "Admins can upload videos"
--- on storage.objects for insert
--- to authenticated
--- with check (
---   bucket_id = 'videos' and
---   (auth.jwt() ->> 'role') = 'admin'
--- );
---
--- create policy "Admins can update videos"
--- on storage.objects for update
--- to authenticated
--- using (
---   bucket_id = 'videos' and
---   (auth.jwt() ->> 'role') = 'admin'
--- );
---
--- create policy "Admins can delete videos"
--- on storage.objects for delete
--- to authenticated
--- using (
---   bucket_id = 'videos' and
---   (auth.jwt() ->> 'role') = 'admin'
--- );
---
--- create policy "Authenticated users can read videos"
--- on storage.objects for select
--- to authenticated
--- using (bucket_id = 'videos');
---
--- create policy "Admins can manage videos table"
--- on public.videos for all
--- to authenticated
--- using ((auth.jwt() ->> 'role') = 'admin')
--- with check ((auth.jwt() ->> 'role') = 'admin');
+-- Storage policies are defined in supabase-setup.sql and use public.can_edit_library().
+-- Direct video uploads are disabled; videos must use validated HTTPS YouTube URLs.
