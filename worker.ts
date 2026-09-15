@@ -9,6 +9,33 @@ type Env = {
 };
 
 const app = new Hono<Env>();
+const RATE_LIMITS = {
+  signup: { limit: 10, windowSeconds: 3600 },
+  admin: { limit: 60, windowSeconds: 60 },
+  mediaRegister: { limit: 10, windowSeconds: 3600 },
+};
+
+function requestClientKey(c: any): string {
+  const ip = c.req.header('CF-Connecting-IP') || c.req.header('X-Forwarded-For')?.split(',')[0]?.trim() || 'unknown-ip';
+  return ip.slice(0, 100);
+}
+
+async function enforceRateLimit(supabase: any, c: any, scope: string, limit: number, windowSeconds: number, identity = ''): Promise<Response | null> {
+  const safeIdentity = String(identity).trim().toLowerCase().slice(0, 160);
+  const rateKey = `worker:${scope}:${requestClientKey(c)}:${safeIdentity}`;
+  const { data, error } = await supabase.rpc('check_security_rate_limit', {
+    p_rate_key: rateKey,
+    p_limit: limit,
+    p_window_seconds: windowSeconds,
+  });
+  if (error || !data?.allowed) {
+    const response = c.json({ error: 'Too many requests. Please try again later.', code: 'rate_limited' }, 429);
+    response.headers.set('Retry-After', String(windowSeconds));
+    return response;
+  }
+  return null;
+}
+
 
 app.use(
   '*',
@@ -140,6 +167,20 @@ function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email);
 }
 
+app.use('/api/admin/*', async (c, next) => {
+  const supabase = createSupabaseClient(c.env);
+  const limited = await enforceRateLimit(supabase, c, 'admin', RATE_LIMITS.admin.limit, RATE_LIMITS.admin.windowSeconds);
+  if (limited) return limited;
+  await next();
+});
+
+app.use('/api/videos/register', async (c, next) => {
+  const supabase = createSupabaseClient(c.env);
+  const limited = await enforceRateLimit(supabase, c, 'media-register', RATE_LIMITS.mediaRegister.limit, RATE_LIMITS.mediaRegister.windowSeconds);
+  if (limited) return limited;
+  await next();
+});
+
 // Auth routes
 app.post('/api/auth/signup', async (c) => {
   try {
@@ -149,6 +190,8 @@ app.post('/api/auth/signup', async (c) => {
     const normalizedFirstName = String(firstName).trim();
     const normalizedLastName = String(lastName).trim();
     const normalizedPhone = normalizeEgyptianPhone(phone);
+    const signupLimitResponse = await enforceRateLimit(supabase, c, 'signup', RATE_LIMITS.signup.limit, RATE_LIMITS.signup.windowSeconds, normalizedEmail);
+    if (signupLimitResponse) return signupLimitResponse;
 
     if (!normalizedEmail || !password || !normalizedFirstName || !normalizedLastName || !normalizedPhone) {
       return c.json({ error: 'All required signup fields must be provided.' }, 400);
