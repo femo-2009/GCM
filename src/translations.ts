@@ -147,6 +147,9 @@ export const translations = {
     profileMediaMigrationCharacters: 'حرفًا',
     profileMediaMigrationNone: 'لا توجد صور قديمة تحتاج إلى ترحيل.',
     profileMediaMigrationFailed: 'فشلت معاينة الصور القديمة.',
+    profileMediaMigrationExecute: 'تنفيذ نقل الصور الأربع',
+    profileMediaMigrationConfirm: 'سيتم نقل الصور الأربع وحفظ نسخة احتياطية منها. هل تريد المتابعة؟',
+    profileMediaMigrationCompleted: 'تم نقل الصور بنجاح',
     // Common
     requiredField: 'هذا الحقل مطلوب',
     passwordsDoNotMatch: 'كلمتا المرور غير متطابقتين',
@@ -321,6 +324,9 @@ export const translations = {
     profileMediaMigrationCharacters: 'characters',
     profileMediaMigrationNone: 'No legacy images need migration.',
     profileMediaMigrationFailed: 'Legacy image preview failed.',
+    profileMediaMigrationExecute: 'Migrate the four images',
+    profileMediaMigrationConfirm: 'The four images will be migrated and backed up. Continue?',
+    profileMediaMigrationCompleted: 'Images migrated successfully',
     // Common
     requiredField: 'This field is required',
     passwordsDoNotMatch: 'Passwords do not match',
