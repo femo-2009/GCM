@@ -138,6 +138,8 @@ export const translations = {
     discipleLimits: 'الصورة حتى 5 MB — JPG أو PNG أو WebP. الحد الأقصى 50 تلميذًا.',
     groupLimits: 'الصورة حتى 5 MB — JPG أو PNG أو WebP. الحد الأقصى 20 مجموعة و100 عضو.',
     adminDataProtectionLimits: 'الصور الشخصية والمرفوعة: حتى 5 MB وبأنواع JPG أو PNG أو WebP. الخطة الشخصية حتى 10,000 حرف. حد المجموعات 20، والتلاميذ 50، وأعضاء المجموعة 100.',
+    profileMediaUploadFailed: 'فشل رفع الصورة. تأكد من النوع والحجم ثم حاول مرة أخرى.',
+    profileMediaInvalidType: 'الصورة يجب أن تكون JPG أو PNG أو WebP وبحجم لا يتجاوز 5 MB.',
     // Common
     requiredField: 'هذا الحقل مطلوب',
     passwordsDoNotMatch: 'كلمتا المرور غير متطابقتين',
@@ -303,6 +305,8 @@ export const translations = {
     discipleLimits: 'Image up to 5 MB — JPG, PNG, or WebP. Maximum 50 disciples.',
     groupLimits: 'Image up to 5 MB — JPG, PNG, or WebP. Maximum 20 groups and 100 members.',
     adminDataProtectionLimits: 'Profile and uploaded images: up to 5 MB in JPG, PNG, or WebP. Personal plan up to 10,000 characters. Limits: 20 groups, 50 disciples, and 100 members per group.',
+    profileMediaUploadFailed: 'Image upload failed. Check the type and size, then try again.',
+    profileMediaInvalidType: 'The image must be JPG, PNG, or WebP and no larger than 5 MB.',
     // Common
     requiredField: 'This field is required',
     passwordsDoNotMatch: 'Passwords do not match',
