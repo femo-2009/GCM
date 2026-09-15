@@ -180,8 +180,8 @@ export default function LibraryView({ lang, user }: LibraryViewProps) {
         const payload = await res.json();
         if (!res.ok) throw new Error(payload?.error || "Registration failed");
 
-        setMediaFile(payload.publicUrl);
-        setMediaFilePreview(payload.publicUrl);
+        setMediaFile(payload.video?.file_url || payload.publicUrl);
+        setMediaFilePreview(payload.video?.file_url || payload.publicUrl);
         setMediaId(payload.video?.id || "");
         setUploadMessage(
           lang === "ar" ? "تم الرفع بنجاح." : "Upload completed.",
@@ -238,8 +238,8 @@ export default function LibraryView({ lang, user }: LibraryViewProps) {
         const payload = await res.json();
         if (!res.ok) throw new Error(payload?.error || "Registration failed");
 
-        setMediaFile(payload.publicUrl);
-        setMediaFilePreview(payload.publicUrl);
+        setMediaFile(payload.video?.file_url || payload.publicUrl);
+        setMediaFilePreview(payload.video?.file_url || payload.publicUrl);
         setMediaId(payload.video?.id || "");
         setUploadProgress(100);
         setUploadMessage(
