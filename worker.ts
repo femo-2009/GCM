@@ -15,6 +15,18 @@ const RATE_LIMITS = {
   mediaRegister: { limit: 10, windowSeconds: 3600 },
 };
 
+function decodeVerifiedJwtPayload(token: string): Record<string, any> | null {
+  try {
+    const payload = token.split('.')[1];
+    if (!payload) return null;
+    const normalized = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
+    return JSON.parse(atob(padded));
+  } catch {
+    return null;
+  }
+}
+
 function requestClientKey(c: any): string {
   const ip = c.req.header('CF-Connecting-IP') || c.req.header('X-Forwarded-For')?.split(',')[0]?.trim() || 'unknown-ip';
   return ip.slice(0, 100);
@@ -78,6 +90,15 @@ const authenticateUser = async (c: any, next: any) => {
   if (!profile || profile.status !== 'approved') {
     return c.json({ error: 'Forbidden - Account is not approved' }, 403);
   }
+
+  // getUser() has already verified this JWT with Supabase. Decode the verified
+  // payload only to enforce the MFA assurance claim for administrators.
+  const claims = decodeVerifiedJwtPayload(token);
+  const isAdmin = profile.role === 'admin' || profile.role === 'super_admin';
+  if (isAdmin && claims?.aal !== 'aal2') {
+    return c.json({ error: 'Forbidden - Administrator MFA verification required', code: 'mfa_required' }, 403);
+  }
+  c.set('aal', claims?.aal || 'aal1');
   c.set('user', profile);
   await next();
 };
