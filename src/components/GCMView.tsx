@@ -418,8 +418,8 @@ export default function GCMView({ lang, user, onUserUpdate }: GCMViewProps) {
   return (
     <div className="py-6 space-y-8" style={{ direction: lang === 'ar' ? 'rtl' : 'ltr' }}>
       <div className="rounded-2xl border border-indigo-100 bg-indigo-50 px-4 py-3 text-[11px] text-indigo-900 leading-relaxed">
-            <p className="font-bold mb-1">{lang === 'ar' ? 'حدود حماية البيانات' : 'Data protection limits'}</p>
-            <p>{lang === 'ar' ? 'الصور: حتى 5 MB (JPG أو PNG أو WebP). الخطة الشخصية: حتى 10,000 حرف. يمكنك إنشاء حتى 50 تلميذًا و20 مجموعة، وبحد أقصى 100 عضو لكل مجموعة.' : 'Images: up to 5 MB (JPG, PNG, or WebP). Personal plan: up to 10,000 characters. You can create up to 50 disciples and 20 groups, with up to 100 members per group.'}</p>
+            <p className="font-bold mb-1">{t.dataProtectionLimitsTitle}</p>
+            <p>{t.dataProtectionLimits}</p>
           </div>
 
       
@@ -730,7 +730,7 @@ export default function GCMView({ lang, user, onUserUpdate }: GCMViewProps) {
               {/* Add/Edit Disciple form inside modal */}
               {discipleFormOpen && (
                 <form onSubmit={handleDiscipleSubmit} className="bg-slate-50 border border-slate-200 rounded-2xl p-4 mb-6 space-y-4">
-                  <p className="text-[10px] text-slate-500">{lang === 'ar' ? 'الصورة حتى 5 MB — JPG أو PNG أو WebP. الحد الأقصى 50 تلميذًا.' : 'Image up to 5 MB — JPG, PNG, or WebP. Maximum 50 disciples.'}</p>
+                  <p className="text-[10px] text-slate-500">{t.discipleLimits}</p>
                   <div className="flex items-center justify-between border-b border-slate-200 pb-2 mb-1">
                     <h4 className="text-xs font-bold text-indigo-700">{editingDisciple ? t.editDisciple : t.addDisciple}</h4>
                     <button type="button" onClick={() => setDiscipleFormOpen(false)} className="p-1 text-slate-400 hover:text-slate-900 rounded-lg cursor-pointer">
@@ -894,7 +894,7 @@ export default function GCMView({ lang, user, onUserUpdate }: GCMViewProps) {
               {/* Group Add/Edit Form */}
               {groupFormOpen && (
                 <form onSubmit={handleGroupSubmit} className="bg-slate-50 border border-slate-200 rounded-2xl p-4 mb-6 space-y-4">
-                  <p className="text-[10px] text-slate-500">{lang === 'ar' ? 'الصورة حتى 5 MB — JPG أو PNG أو WebP. الحد الأقصى 20 مجموعة و100 عضو.' : 'Image up to 5 MB — JPG, PNG, or WebP. Maximum 20 groups and 100 members.'}</p>
+                  <p className="text-[10px] text-slate-500">{t.groupLimits}</p>
                   <div className="flex items-center justify-between border-b border-slate-200 pb-2 mb-1">
                     <h4 className="text-xs font-bold text-indigo-700">{editingGroup ? t.editGroup : (lang === 'ar' ? 'إضافة مجموعة متابعة' : 'Add Group')}</h4>
                     <button type="button" onClick={() => setGroupFormOpen(false)} className="p-1 text-slate-400 hover:text-slate-950 rounded-lg cursor-pointer">
