@@ -1,12 +1,12 @@
 export type UserRole = 'super_admin' | 'admin' | 'user';
 export type UserStatus = 'pending' | 'approved' | 'blocked';
 
-export interface UserCounts {
+interface UserCounts {
   christians: number;
   friends: number;
 }
 
-export interface PersonalPlan {
+interface PersonalPlan {
   photo: string; // Base64 or URL
   text: string;
 }
