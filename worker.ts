@@ -658,7 +658,6 @@ app.post('/api/groups', authenticateUser, async (c) => {
     const supabase = createSupabaseClient(c.env);
     const { title, description, photo } = await c.req.json();
     if (!validLibraryText(title, 200) || !validLibraryText(description, 5000)) return c.json({ error: 'Invalid title or description' }, 400);
-    if (photo !== undefined && (typeof photo !== 'string' || photo.length > 2048)) return c.json({ error: 'Invalid image path', code: 'invalid_photo' }, 400);
     const appData = await getAppData(supabase);
     const newGroup = { id: `group-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`, title, description, photo: photo || '' };
     await saveAppData(supabase, { ...appData, groups: [...(appData.groups || []), newGroup] });
