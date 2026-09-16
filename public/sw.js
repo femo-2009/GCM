@@ -17,15 +17,23 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Basic network-first strategy, falling back to cache when offline.
+// Network-first for static assets; never cache API or authenticated responses.
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
-
+  const url = new URL(event.request.url);
+  const isApiRequest = url.pathname.startsWith('/api/');
+  const hasAuthorization = event.request.headers.has('Authorization');
+  if (isApiRequest || hasAuthorization) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        const clone = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+        if (response.ok && response.type === 'basic') {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+        }
         return response;
       })
       .catch(() => caches.match(event.request)),
