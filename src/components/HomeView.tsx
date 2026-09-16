@@ -214,7 +214,6 @@ export default function HomeView({ lang, user, groups, setGroups, onNavigate }: 
     if (leaderFormRef.current) {
       const submitButton = leaderFormRef.current.querySelector('button[type="submit"]') as HTMLButtonElement;
       if (submitButton && submitButton.disabled) {
-        console.log('⚠️  Form already submitted, ignoring duplicate');
         return;
       }
     }
@@ -235,7 +234,6 @@ export default function HomeView({ lang, user, groups, setGroups, onNavigate }: 
         const endpoint = isEdit ? `/api/leaders/${editingLeader.id}` : '/api/leaders';
         const method = isEdit ? 'PUT' : 'POST';
 
-        console.log('Submitting leader:', { isEdit, name: leaderName, method });
 
         const res = await fetch(endpoint, {
           method,
