@@ -41,11 +41,11 @@ export default function Navbar({ currentTab, setCurrentTab, lang, setLang, user,
         <div className="flex items-center justify-between h-16">
           {/* Logo Section */}
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center shadow-md overflow-hidden bg-white">
+            <div className="w-12 h-12 flex items-center justify-center overflow-hidden bg-transparent">
               <img
                 src="/icon-512.png"
                 alt="GCM Logo"
-                className="w-full h-full object-cover"
+                className="w-full h-full object-contain"
                 width={512}
                 height={512}
               />
