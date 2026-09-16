@@ -69,7 +69,7 @@ export default function GroupsView({ lang, user, groups, setGroups, onNavigate }
           throw new Error(`Failed to load groups: ${response.status}`);
         }
 
-        const data = await response.json();
+        const data: any = await response.json();
         setGroups(data.groups || []);
       } catch (error) {
         console.error('Failed to load groups:', error);
@@ -152,7 +152,7 @@ export default function GroupsView({ lang, user, groups, setGroups, onNavigate }
         }
 
         // Parse response to get group id (for newly created groups)
-        const savedGroup = await res.json();
+        const savedGroup: any = await res.json();
         const groupId = savedGroup.id || editingGroup?.id;
 
         // Assign / unassign leaders
@@ -186,7 +186,7 @@ export default function GroupsView({ lang, user, groups, setGroups, onNavigate }
           throw new Error(`Failed to refresh groups: ${freshRes.status}`);
         }
 
-        const freshData = await freshRes.json();
+        const freshData: any = await freshRes.json();
         setGroups(freshData.groups || []);
         
         // Re-fetch leaders to reflect changes
@@ -269,7 +269,7 @@ export default function GroupsView({ lang, user, groups, setGroups, onNavigate }
           throw new Error(`Failed to refresh groups: ${freshRes.status}`);
         }
 
-        const freshData = await freshRes.json();
+        const freshData: any = await freshRes.json();
         setGroups(freshData.groups || []);
         alert(lang === 'ar' ? 'تم حذف المجموعة بنجاح' : 'Group deleted successfully');
       } catch (err: any) {
