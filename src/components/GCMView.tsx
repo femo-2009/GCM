@@ -66,7 +66,7 @@ export default function GCMView({ lang, user, onUserUpdate }: GCMViewProps) {
         body: JSON.stringify({ userId: user.id, photo: path }),
       });
       if (!res.ok) throw new Error(t.profileMediaUploadFailed);
-      const data = await res.json();
+      const data: any = await res.json();
       onUserUpdate(data.user);
     } catch (err: any) {
       console.error(err);
@@ -120,7 +120,7 @@ export default function GCMView({ lang, user, onUserUpdate }: GCMViewProps) {
           throw new Error(errorMessage);
         }
         
-        const data = await res.json();
+        const data: any = await res.json();
         onUserUpdate(data.user);
       } catch (err: any) {
         console.error('Failed to persist count:', err);
@@ -164,7 +164,7 @@ export default function GCMView({ lang, user, onUserUpdate }: GCMViewProps) {
           throw new Error(errorMessage);
         }
         
-        const data = await res.json();
+        const data: any = await res.json();
         onUserUpdate(data.user);
         setPlanFormOpen(false);
         setPlanPhoto('');
@@ -214,7 +214,7 @@ export default function GCMView({ lang, user, onUserUpdate }: GCMViewProps) {
           throw new Error(errorMessage);
         }
 
-        const data = await res.json();
+        const data: any = await res.json();
         onUserUpdate(data.user);
         // Reset
         setDiscipleFormOpen(false);
@@ -261,7 +261,7 @@ export default function GCMView({ lang, user, onUserUpdate }: GCMViewProps) {
           throw new Error(errorMessage);
         }
         
-        const data = await res.json();
+        const data: any = await res.json();
         onUserUpdate(data.user);
         alert(lang === 'ar' ? 'تم حذف التلميذ بنجاح' : 'Disciple deleted successfully');
       } catch (err: any) {
@@ -337,7 +337,7 @@ export default function GCMView({ lang, user, onUserUpdate }: GCMViewProps) {
           throw new Error(errorMessage);
         }
 
-        const data = await res.json();
+        const data: any = await res.json();
         onUserUpdate(data.user);
         // Reset
         setGroupFormOpen(false);
@@ -385,7 +385,7 @@ export default function GCMView({ lang, user, onUserUpdate }: GCMViewProps) {
           throw new Error(errorMessage);
         }
         
-        const data = await res.json();
+        const data: any = await res.json();
         onUserUpdate(data.user);
         alert(lang === 'ar' ? 'تم حذف المجموعة بنجاح' : 'Group deleted successfully');
       } catch (err: any) {
