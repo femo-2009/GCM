@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Home, BookOpen, Users, User as UserIcon, Settings, LogOut, Globe, Menu, X } from 'lucide-react';
 import { Language, translations } from '../translations';
 import { User } from '../types';
-import logoImg from '../assets/logo.png';
 
 interface NavbarProps {
   currentTab: string;
@@ -44,7 +43,7 @@ export default function Navbar({ currentTab, setCurrentTab, lang, setLang, user,
           {/* Logo Section */}
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl flex items-center justify-center shadow-md overflow-hidden bg-white">
-              <img src={logoImg} alt="GCM Logo" className="w-full h-full object-cover" />
+              <img src="/icon-512.png" alt="GCM Logo" className="w-full h-full object-cover" />
             </div>
             <span className="font-extrabold text-sm md:text-base text-indigo-950 font-sans">
               {t.appName}
