@@ -2,7 +2,13 @@ import { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { Sparkles, Globe } from 'lucide-react';
 import { Language, translations } from '../translations';
-import logoImg from '../assets/logo.png';
+import logoImg1 from '../assets/logo-splash-1.png';
+import logoImg2 from '../assets/logo-splash-2.png';
+import logoImg3 from '../assets/logo-splash-3.png';
+import logoImg4 from '../assets/logo-splash-4.png';
+import logoImg5 from '../assets/logo-splash-5.png';
+
+const splashLogos = [logoImg1, logoImg2, logoImg3, logoImg4, logoImg5];
 
 interface SplashProps {
   onComplete: () => void;
@@ -12,6 +18,7 @@ interface SplashProps {
 
 export default function Splash({ onComplete, lang, setLang }: SplashProps) {
   const [progress, setProgress] = useState(0);
+  const [logoImg] = useState(() => splashLogos[Math.floor(Math.random() * splashLogos.length)]);
   const t = translations[lang];
 
   useEffect(() => {
