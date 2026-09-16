@@ -13,7 +13,7 @@ export async function uploadProfileMedia(file: File, slot: 'avatar' | 'personal-
     headers: { Authorization: `Bearer ${session.access_token}` },
     body: formData,
   });
-  const payload = await response.json().catch(() => null);
+  const payload: any = await response.json().catch(() => null);
   if (!response.ok || typeof payload?.path !== 'string') throw new Error(errorMessage);
   return payload.path;
 }
