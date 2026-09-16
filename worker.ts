@@ -837,6 +837,14 @@ function validProfileText(value: unknown, maxLength: number, required = false): 
 function validIdArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.length <= PROFILE_MAX_MEMBER_IDS && value.every((id) => typeof id === 'string' && id.length <= 100);
 }
+
+function validProfileCounts(value: unknown): value is { christians: number; friends: number } {
+  if (!value || typeof value !== 'object') return false;
+  const counts = value as Record<string, unknown>;
+  return Number.isSafeInteger(counts.christians) && Number.isSafeInteger(counts.friends)
+    && (counts.christians as number) >= 0 && (counts.friends as number) >= 0
+    && (counts.christians as number) <= 1_000_000 && (counts.friends as number) <= 1_000_000;
+}
 const PROFILE_MEDIA_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const PROFILE_MEDIA_SLOTS = new Set(['avatar', 'personal-plan', 'groups', 'disciples']);
 
@@ -958,10 +966,13 @@ app.post('/api/profile/update', authenticateUser, async (c) => {
     const supabase = createSupabaseClient(c.env);
     const { photo, counts, personalPlan } = await c.req.json();
     if (photo !== undefined && photo !== '' && !isSafeProfileMediaPath(photo, user.id, false, user)) return c.json({ error: 'Invalid profile image path', code: 'profile_media_invalid_path' }, 400);
+    if (counts !== undefined && !validProfileCounts(counts)) return c.json({ error: 'Invalid profile counts', code: 'profile_invalid_counts' }, 400);
     const updates: any = { updated_at: new Date().toISOString() };
     if (photo !== undefined) updates.photo = photo;
     if (counts !== undefined) updates.counts = counts;
     if (personalPlan !== undefined) {
+      if (!personalPlan || typeof personalPlan !== 'object' || Array.isArray(personalPlan)) return c.json({ error: 'Invalid personal plan', code: 'profile_invalid_plan' }, 400);
+      if (personalPlan.text !== undefined && !validProfileText(personalPlan.text, 10000)) return c.json({ error: 'Personal plan is too long', code: 'profile_limit_exceeded' }, 400);
       if (personalPlan.photo !== undefined && personalPlan.photo !== '' && !isSafeProfileMediaPath(personalPlan.photo, user.id, false, user)) return c.json({ error: 'Invalid plan image path', code: 'profile_media_invalid_path' }, 400);
       updates.personal_plan = personalPlan;
     }
