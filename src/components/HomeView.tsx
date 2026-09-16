@@ -64,7 +64,7 @@ export default function HomeView({ lang, user, groups, setGroups, onNavigate }: 
             Authorization: `Bearer ${session?.access_token || ''}`,
           },
         });
-      const data = await res.json();
+      const data: any = await res.json();
       setHomeConfig(data.homeConfig);
       setLeaders(data.leaders);
       setGroups(data.groups);
@@ -140,7 +140,7 @@ export default function HomeView({ lang, user, groups, setGroups, onNavigate }: 
           throw new Error(errorMessage);
         }
         
-        const updatedConfig = await res.json();
+        const updatedConfig: any = await res.json();
         setHomeConfig(prev => ({ ...prev, ...updatedConfig }));
         setIsEditingWelcome(false);
         alert(lang === 'ar' ? 'تم حفظ رسالة الترحيب بنجاح' : 'Welcome message saved successfully');
@@ -194,7 +194,7 @@ export default function HomeView({ lang, user, groups, setGroups, onNavigate }: 
           throw new Error(errorMessage);
         }
         
-        const updatedConfig = await res.json();
+        const updatedConfig: any = await res.json();
         setHomeConfig(prev => ({ ...prev, ...updatedConfig }));
         setIsEditingPlan(false);
         alert(lang === 'ar' ? 'تم حفظ الخطة العامة بنجاح' : 'General plan saved successfully');
