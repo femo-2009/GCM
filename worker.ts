@@ -1262,6 +1262,10 @@ app.get('*', async (c) => {
       'Strict-Transport-Security',
       'max-age=31536000; includeSubDomains',
     );
+    securedResponse.headers.set(
+      'Content-Security-Policy',
+      "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self' https://*.supabase.co https://*.workers.dev; frame-src https://www.youtube.com https://www.youtube-nocookie.com; media-src 'self' blob:; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'",
+    );
 
     return securedResponse;
   };
