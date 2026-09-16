@@ -268,7 +268,7 @@ export default function LibraryView({ lang, user }: LibraryViewProps) {
           }),
         });
 
-        const payload = await res.json();
+        const payload: any = await res.json();
         if (!res.ok) throw new Error(payload?.error || "Registration failed");
 
         setMediaFile(payload.video?.file_url || payload.publicUrl);
@@ -326,7 +326,7 @@ export default function LibraryView({ lang, user }: LibraryViewProps) {
           }),
         });
 
-        const payload = await res.json();
+        const payload: any = await res.json();
         if (!res.ok) throw new Error(payload?.error || "Registration failed");
 
         setMediaFile(payload.video?.file_url || payload.publicUrl);
