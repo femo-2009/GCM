@@ -66,7 +66,7 @@ export default function AdminPanelView({ lang, user }: AdminPanelViewProps) {
       const response = await fetch("/api/admin/users", {
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
-      const payload = await response.json();
+      const payload: any = await response.json();
       if (!response.ok) throw new Error(payload?.error || "Failed to load users");
 
       const mapped = (payload.users || []).map(mapProfileToUser);
@@ -93,7 +93,7 @@ export default function AdminPanelView({ lang, user }: AdminPanelViewProps) {
       headers: { Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
-    const payload = await response.json();
+    const payload: any = await response.json();
     if (!response.ok) throw new Error(payload?.error || "Admin action failed");
     return payload;
   };
