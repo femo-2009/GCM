@@ -657,7 +657,8 @@ app.post('/api/groups', authenticateUser, async (c) => {
     }
     const supabase = createSupabaseClient(c.env);
     const { title, description, photo } = await c.req.json();
-    if (!title || !description) return c.json({ error: 'Title and description are required' }, 400);
+    if (!validLibraryText(title, 200) || !validLibraryText(description, 5000)) return c.json({ error: 'Invalid title or description' }, 400);
+    if (photo !== undefined && (typeof photo !== 'string' || photo.length > 2048)) return c.json({ error: 'Invalid image path', code: 'invalid_photo' }, 400);
     const appData = await getAppData(supabase);
     const newGroup = { id: `group-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`, title, description, photo: photo || '' };
     await saveAppData(supabase, { ...appData, groups: [...(appData.groups || []), newGroup] });
@@ -734,9 +735,10 @@ app.post('/api/library', authenticateUser, async (c) => {
     }
     const supabase = createSupabaseClient(c.env);
     const { type, title, description, url, mediaId } = await c.req.json();
-    if (!title || !description || !type) {
-      return c.json({ error: 'Title, description, and type are required' }, 400);
+    if (!validLibraryText(title, 200) || !validLibraryText(description, 5000) || typeof type !== 'string' || type.length > 20) {
+      return c.json({ error: 'Invalid title, description, or type' }, 400);
     }
+    if (url !== undefined && (typeof url !== 'string' || url.length > 2048)) return c.json({ error: 'Invalid URL', code: 'invalid_url' }, 400);
     if (type === 'text') {
       const appData = await getAppData(supabase);
       const newItem = { id: `lib-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`, type, title, description, url: '' };
@@ -773,7 +775,8 @@ app.put('/api/library/:id', authenticateUser, async (c) => {
     const supabase = createSupabaseClient(c.env);
     const { id } = c.req.param();
     const { title, description, url } = await c.req.json();
-    if (!title || !description) return c.json({ error: 'Title and description are required' }, 400);
+    if (!validLibraryText(title, 200) || !validLibraryText(description, 5000)) return c.json({ error: 'Invalid title or description' }, 400);
+    if (url !== undefined && (typeof url !== 'string' || url.length > 2048)) return c.json({ error: 'Invalid URL', code: 'invalid_url' }, 400);
     if (id.startsWith('lib-')) {
       const appData = await getAppData(supabase);
       const library = (appData.library || []).map((item: any) => item.id === id ? { ...item, title, description } : item);
@@ -1044,6 +1047,10 @@ app.post('/api/profile/groups', authenticateUser, async (c) => {
     return c.json({ error: 'Failed to manage groups' }, 500);
   }
 });
+
+function validLibraryText(value: unknown, maxLength: number): value is string {
+  return typeof value === 'string' && value.trim().length > 0 && value.length <= maxLength;
+}
 
 function isAllowedYouTubeUrl(value: unknown): boolean {
   if (typeof value !== 'string') return false;
