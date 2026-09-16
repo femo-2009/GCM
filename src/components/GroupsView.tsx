@@ -22,6 +22,7 @@ export default function GroupsView({ lang, user, groups, setGroups, onNavigate }
 
   // All leaders (for display and assignment)
   const [leaders, setLeaders] = useState<Leader[]>([]);
+  const [groupsLoading, setGroupsLoading] = useState(true);
 
   
   useEffect(() => {
@@ -72,6 +73,8 @@ export default function GroupsView({ lang, user, groups, setGroups, onNavigate }
         setGroups(data.groups || []);
       } catch (error) {
         console.error('Failed to load groups:', error);
+      } finally {
+        setGroupsLoading(false);
       }
     };
 
@@ -307,7 +310,12 @@ export default function GroupsView({ lang, user, groups, setGroups, onNavigate }
       </div>
 
       {/* Grid of Group Cards */}
-      {groups.length === 0 ? (
+      {groupsLoading ? (
+        <div className="text-center py-20 bg-white rounded-3xl border border-indigo-100 text-indigo-600 text-sm font-semibold">
+          <div className="mx-auto mb-3 w-7 h-7 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+          {t.groupsLoading}
+        </div>
+      ) : groups.length === 0 ? (
         <div className="text-center py-20 bg-white rounded-3xl border border-slate-200 text-slate-500 text-sm">
           {lang === 'ar' ? 'لا توجد مجموعات مضافة حالياً.' : 'No groups added yet.'}
         </div>
