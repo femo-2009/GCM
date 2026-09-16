@@ -39,11 +39,16 @@ export default function Navbar({ currentTab, setCurrentTab, lang, setLang, user,
     <nav className="bg-white border-b border-slate-200 text-slate-800 sticky top-0 z-40 shadow-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          
           {/* Logo Section */}
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl flex items-center justify-center shadow-md overflow-hidden bg-white">
-              <img src="/icon-512.png" alt="GCM Logo" className="w-full h-full object-cover" />
+              <img
+                src="/icon-512.png"
+                alt="GCM Logo"
+                className="w-full h-full object-cover"
+                width={512}
+                height={512}
+              />
             </div>
             <span className="font-extrabold text-sm md:text-base text-indigo-950 font-sans">
               {t.appName}
@@ -108,7 +113,6 @@ export default function Navbar({ currentTab, setCurrentTab, lang, setLang, user,
               {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
           </div>
-
         </div>
       </div>
 
@@ -134,7 +138,7 @@ export default function Navbar({ currentTab, setCurrentTab, lang, setLang, user,
               </button>
             );
           })}
-          
+
           <div className="pt-4 border-t border-slate-200 flex items-center justify-between">
             <span className="text-xs text-slate-500">{user.firstName} {user.lastName}</span>
             <button
