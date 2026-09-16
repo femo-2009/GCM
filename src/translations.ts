@@ -68,6 +68,7 @@ export const translations = {
     planTextEn: 'نص الخطة (بالإنجليزية)',
     uploadPhoto: 'تحميل صورة',
     save: 'حفظ والتحديث',
+    actionInProgress: 'جارٍ تنفيذ العملية...',
     cancel: 'إلغاء',
     
     // Library
@@ -245,6 +246,7 @@ export const translations = {
     planTextEn: 'Plan Text (English)',
     uploadPhoto: 'Upload Photo',
     save: 'Save Changes',
+    actionInProgress: 'Action in progress...',
     cancel: 'Cancel',
     
     // Library
