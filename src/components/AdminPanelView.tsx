@@ -28,7 +28,7 @@ interface AdminPanelViewProps {
 }
 
 export default function AdminPanelView({ lang, user }: AdminPanelViewProps) {
-  const { withLoading } = useLoading();
+  const { withLoading, isLoading } = useLoading();
   const [pendingUsers, setPendingUsers] = useState<User[]>([]);
   const [approvedUsers, setApprovedUsers] = useState<User[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -652,9 +652,10 @@ export default function AdminPanelView({ lang, user }: AdminPanelViewProps) {
               <div className="flex gap-3 pt-4 border-t border-slate-200">
                 <button
                   onClick={handleSaveAdminPermissions}
+                  disabled={isLoading}
                   className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer"
                 >
-                  {t.save}
+                  {isLoading ? t.actionInProgress : t.save}
                 </button>
                 <button
                   onClick={() => setAssigningAdminUser(null)}
