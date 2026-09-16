@@ -7,8 +7,9 @@ import logoImg2 from '../assets/logo-splash-2.png';
 import logoImg3 from '../assets/logo-splash-3.png';
 import logoImg4 from '../assets/logo-splash-4.png';
 import logoImg5 from '../assets/logo-splash-5.png';
+import logoImg6 from '../assets/logo-splash-6.png';
 
-const splashLogos = [logoImg1, logoImg2, logoImg3, logoImg4, logoImg5];
+const splashLogos = [logoImg1, logoImg2, logoImg3, logoImg4, logoImg5, logoImg6];
 
 interface SplashProps {
   onComplete: () => void;
