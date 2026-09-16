@@ -320,7 +320,7 @@ app.post('/api/auth/signup', async (c) => {
       throw profileError;
     }
   } catch (err: any) {
-    return c.json({ error: err.message || 'Failed to create account' }, 500);
+    return c.json({ error: 'Failed to create account' }, 500);
   }
 });
 
@@ -358,7 +358,7 @@ app.get('/api/admin/users', authenticateUser, async (c) => {
 
     return c.json({ users: profiles || [] });
   } catch (error: any) {
-    return c.json({ error: error?.message || 'Failed to load users' }, 500);
+    return c.json({ error: 'Failed to load users' }, 500);
   }
 });
 
@@ -384,7 +384,7 @@ app.post('/api/admin/users/:id/approve', authenticateUser, async (c) => {
     await writeAuditLog(supabase, c, actor.id, 'approve_user', 'user_profile', target.id, { new_status: 'approved' });
     return c.json({ user: data });
   } catch (error: any) {
-    return c.json({ error: error?.message || 'Failed to approve user' }, 400);
+    return c.json({ error: 'Failed to approve user' }, 400);
   }
 });
 
@@ -403,7 +403,7 @@ app.post('/api/admin/users/:id/block', authenticateUser, async (c) => {
     await writeAuditLog(supabase, c, actor.id, 'block_user', 'user_profile', target.id, { new_status: 'blocked' });
     return c.json({ user: data });
   } catch (error: any) {
-    return c.json({ error: error?.message || 'Failed to block user' }, 400);
+    return c.json({ error: 'Failed to block user' }, 400);
   }
 });
 
@@ -421,7 +421,7 @@ app.post('/api/admin/users/:id/permissions', authenticateUser, async (c) => {
     await writeAuditLog(supabase, c, actor.id, 'change_user_permissions', 'user_profile', target.id, { role, permissions });
     return c.json({ user: data });
   } catch (error: any) {
-    return c.json({ error: error?.message || 'Failed to update permissions' }, 400);
+    return c.json({ error: 'Failed to update permissions' }, 400);
   }
 });
 
@@ -511,7 +511,7 @@ app.post('/api/admin/profile-media/migrate', authenticateUser, async (c) => {
     await writeAuditLog(supabase, c, actor.id, 'migrate_profile_media', 'profile_media', 'legacy-batch', { count: migrated.length });
     return c.json({ dryRun: false, migrated: migrated.length, items: migrated });
   } catch (error: any) {
-    return c.json({ error: error?.message || 'Profile media migration failed' }, 500);
+    return c.json({ error: 'Profile media migration failed' }, 500);
   }
 });
 
@@ -897,7 +897,7 @@ app.post('/api/profile-media/upload', authenticateAnyUser, async (c) => {
     await writeAuditLog(supabase, c, user.id, 'upload_profile_media', 'profile_media', path, { slot, size_bytes: file.size, content_type: contentType });
     return c.json({ path, slot });
   } catch (error: any) {
-    return c.json({ error: error?.message || 'Failed to upload profile image', code: 'profile_media_upload_failed' }, 500);
+    return c.json({ error: 'Failed to upload profile image', code: 'profile_media_upload_failed' }, 500);
   }
 });
 
@@ -933,7 +933,7 @@ app.delete('/api/profile-media', authenticateUser, async (c) => {
     await writeAuditLog(supabase, c, user.id, 'delete_profile_media', 'profile_media', path);
     return c.json({ success: true });
   } catch (error: any) {
-    return c.json({ error: error?.message || 'Failed to delete profile image', code: 'profile_media_delete_failed' }, 500);
+    return c.json({ error: 'Failed to delete profile image', code: 'profile_media_delete_failed' }, 500);
   }
 });
 
@@ -983,7 +983,7 @@ app.post('/api/profile/update', authenticateUser, async (c) => {
     if (error) throw error;
     return c.json({ user: await hydrateProfileMedia(supabase, data) });
   } catch (err: any) {
-    return c.json({ error: err.message || 'Failed to update profile' }, 500);
+    return c.json({ error: 'Failed to update profile' }, 500);
   }
 });
 
@@ -1130,7 +1130,7 @@ app.post('/api/videos/register', authenticateUser, async (c) => {
 
     return c.json({ success: true, publicUrl: streamUrl, video });
   } catch (err: any) {
-    return c.json({ error: err.message || 'Failed to register uploaded video' }, 500);
+    return c.json({ error: 'Failed to register uploaded video' }, 500);
   }
 });
 
