@@ -7,7 +7,9 @@
     "dev:worker": "wrangler dev",
     "build": "vite build",
     "deploy": "npm run build && wrangler deploy",
-    "preview": "wrangler dev"
+    "preview": "wrangler dev",
+    "typecheck": "tsc --noEmit",
+    "audit:prod": "npm audit --omit=dev"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.0",
@@ -20,10 +22,12 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260708.1",
     "@tailwindcss/vite": "^4.0.0",
+    "@types/node": "^22.20.3",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^4.3.1",
     "tailwindcss": "^4.0.0",
+    "typescript": "^5.9.3",
     "vite": "^6.4.3",
     "wrangler": "^4.108.0"
   }
