@@ -16,7 +16,6 @@ import { fetchProfileFromApi, signUpWithApproval } from "../lib/authApi";
 import { Language, translations } from "../translations";
 import { User } from "../types";
 import { uploadProfileMedia } from "../lib/profileMedia";
-import logoImg from "../assets/logo.png";
 
 interface AuthProps {
   lang: Language;
@@ -555,7 +554,7 @@ export default function Auth({ lang, setLang, onAuthSuccess }: AuthProps) {
             <div className="relative z-10 flex flex-col items-center">
               <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-lg mb-4 overflow-hidden">
                 <img
-                  src={logoImg}
+                  src="/icon-512.png"
                   alt="GCM Logo"
                   className="w-full h-full object-cover"
                 />
