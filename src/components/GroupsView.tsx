@@ -15,7 +15,7 @@ interface GroupsViewProps {
 }
 
 export default function GroupsView({ lang, user, groups, setGroups, onNavigate }: GroupsViewProps) {
-  const { withLoading } = useLoading();
+  const { withLoading, isLoading } = useLoading();
   const [isAdding, setIsAdding] = useState(false);
   const [editingGroup, setEditingGroup] = useState<Group | null>(null);
   const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
@@ -423,7 +423,7 @@ export default function GroupsView({ lang, user, groups, setGroups, onNavigate }
               </button>
 
               <h3 className="text-xl font-bold text-slate-900 mb-6 pr-6">
-                {editingGroup ? t.editGroup : t.addGroup}
+                {isLoading ? t.actionInProgress : (editingGroup ? t.editGroup : t.addGroup)}
               </h3>
 
               <form onSubmit={handleGroupSubmit} className="space-y-4">
