@@ -6,9 +6,17 @@ type Env = {
   Bindings: SupabaseEnv & {
     ASSETS: { fetch: (request: Request) => Promise<Response> };
   };
+  Variables: {
+    user: any;
+    aal: string;
+  };
 };
 
 const app = new Hono<Env>();
+
+async function readJson<T = any>(c: any): Promise<T> {
+  return c.req.json() as Promise<T>;
+}
 const RATE_LIMITS = {
   signup: { limit: 10, windowSeconds: 3600 },
   admin: { limit: 60, windowSeconds: 60 },
@@ -227,7 +235,7 @@ app.use('/api/profile-media/*', async (c, next) => {
 app.post('/api/auth/signup', async (c) => {
   try {
     const supabase = createSupabaseClient(c.env);
-    const { email = '', password = '', firstName = '', lastName = '', phone = '', photo = '' } = await c.req.json();
+    const { email = '', password = '', firstName = '', lastName = '', phone = '', photo = '' } = await readJson(c);
     const normalizedEmail = String(email).trim().toLowerCase();
     const normalizedFirstName = String(firstName).trim();
     const normalizedLastName = String(lastName).trim();
@@ -413,7 +421,7 @@ app.post('/api/admin/users/:id/permissions', authenticateUser, async (c) => {
     if (actor.role !== 'super_admin') return c.json({ error: 'Forbidden - Only super admin can change roles' }, 403);
     const supabase = createSupabaseClient(c.env);
     const target = await requireConfirmedTarget(supabase, c.req.param('id'));
-    const body = await c.req.json();
+    const body = await readJson(c);
     const permissions = Array.isArray(body.permissions) ? body.permissions.filter((p: any) => typeof p === 'string') : [];
     const role = body.role === 'admin' ? 'admin' : 'user';
     const { data, error } = await supabase.from('user_profiles').update({ role, permissions }).eq('id', target.id).select('*').single();
@@ -476,7 +484,7 @@ app.post('/api/admin/profile-media/migrate', authenticateUser, async (c) => {
   try {
     const actor = c.get('user');
     if (actor.role !== 'super_admin') return c.json({ error: 'Forbidden - Only super admin can migrate profile media' }, 403);
-    const body = await c.req.json().catch(() => ({}));
+    const body = await readJson(c).catch(() => ({}));
     const dryRun = body?.dryRun !== false;
     const supabase = createSupabaseClient(c.env);
     const { data: profiles, error } = await supabase.from('user_profiles').select('id,email,photo,personal_plan,user_groups,disciples');
@@ -540,7 +548,7 @@ app.post('/api/home/welcome', authenticateUser, async (c) => {
       return c.json({ error: 'Forbidden - Insufficient permissions' }, 403);
     }
     const supabase = createSupabaseClient(c.env);
-    const { welcomeMessageAr, welcomeMessageEn } = await c.req.json();
+    const { welcomeMessageAr, welcomeMessageEn } = await readJson(c);
     const appData = await getAppData(supabase);
     const updatedHomeConfig = { ...appData.homeConfig, welcomeMessageAr, welcomeMessageEn };
     await saveAppData(supabase, { ...appData, homeConfig: updatedHomeConfig });
@@ -557,7 +565,7 @@ app.post('/api/home/plan', authenticateUser, async (c) => {
       return c.json({ error: 'Forbidden - Insufficient permissions' }, 403);
     }
     const supabase = createSupabaseClient(c.env);
-    const { planPhoto, planTextAr, planTextEn } = await c.req.json();
+    const { planPhoto, planTextAr, planTextEn } = await readJson(c);
     const appData = await getAppData(supabase);
     const updatedHomeConfig = { ...appData.homeConfig, planPhoto, planTextAr, planTextEn };
     await saveAppData(supabase, { ...appData, homeConfig: updatedHomeConfig });
@@ -585,7 +593,7 @@ app.post('/api/leaders', authenticateUser, async (c) => {
       return c.json({ error: 'Forbidden - Insufficient permissions' }, 403);
     }
     const supabase = createSupabaseClient(c.env);
-    const { name, description, photo, groupId } = await c.req.json();
+    const { name, description, photo, groupId } = await readJson(c);
     if (!name) return c.json({ error: 'Leader name is required' }, 400);
 
     const appData = await getAppData(supabase);
@@ -609,7 +617,7 @@ app.put('/api/leaders/:id', authenticateUser, async (c) => {
     }
     const supabase = createSupabaseClient(c.env);
     const { id } = c.req.param();
-    const { name, description, photo, groupId } = await c.req.json();
+    const { name, description, photo, groupId } = await readJson(c);
     const appData = await getAppData(supabase);
     const leaders = appData.leaders || [];
     const idx = leaders.findIndex((l: any) => l.id === id);
@@ -656,7 +664,7 @@ app.post('/api/groups', authenticateUser, async (c) => {
       return c.json({ error: 'Forbidden - Insufficient permissions' }, 403);
     }
     const supabase = createSupabaseClient(c.env);
-    const { title, description, photo } = await c.req.json();
+    const { title, description, photo } = await readJson(c);
     if (!validLibraryText(title, 200) || !validLibraryText(description, 5000)) return c.json({ error: 'Invalid title or description' }, 400);
     const appData = await getAppData(supabase);
     const newGroup = { id: `group-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`, title, description, photo: photo || '' };
@@ -675,7 +683,7 @@ app.put('/api/groups/:id', authenticateUser, async (c) => {
     }
     const supabase = createSupabaseClient(c.env);
     const { id } = c.req.param();
-    const { title, description, photo } = await c.req.json();
+    const { title, description, photo } = await readJson(c);
     const appData = await getAppData(supabase);
     const groups = appData.groups || [];
     const idx = groups.findIndex((g: any) => g.id === id);
@@ -733,7 +741,7 @@ app.post('/api/library', authenticateUser, async (c) => {
       return c.json({ error: 'Forbidden - Insufficient permissions' }, 403);
     }
     const supabase = createSupabaseClient(c.env);
-    const { type, title, description, url, mediaId } = await c.req.json();
+    const { type, title, description, url, mediaId } = await readJson(c);
     if (!validLibraryText(title, 200) || !validLibraryText(description, 5000) || typeof type !== 'string' || type.length > 20) {
       return c.json({ error: 'Invalid title, description, or type' }, 400);
     }
@@ -773,7 +781,7 @@ app.put('/api/library/:id', authenticateUser, async (c) => {
     }
     const supabase = createSupabaseClient(c.env);
     const { id } = c.req.param();
-    const { title, description, url } = await c.req.json();
+    const { title, description, url } = await readJson(c);
     if (!validLibraryText(title, 200) || !validLibraryText(description, 5000)) return c.json({ error: 'Invalid title or description' }, 400);
     if (url !== undefined && (typeof url !== 'string' || url.length > 2048)) return c.json({ error: 'Invalid URL', code: 'invalid_url' }, 400);
     if (id.startsWith('lib-')) {
@@ -903,7 +911,7 @@ app.post('/api/profile-media/upload', authenticateAnyUser, async (c) => {
 app.post('/api/profile-media/sign', authenticateUser, async (c) => {
   try {
     const user = c.get('user');
-    const body = await c.req.json();
+    const body = await readJson(c);
     const path = body?.path;
     const isAdmin = user.role === 'admin' || user.role === 'super_admin';
     if (!isSafeProfileMediaPath(path, user.id, isAdmin, user)) {
@@ -921,7 +929,7 @@ app.post('/api/profile-media/sign', authenticateUser, async (c) => {
 app.delete('/api/profile-media', authenticateUser, async (c) => {
   try {
     const user = c.get('user');
-    const body = await c.req.json();
+    const body = await readJson(c);
     const path = body?.path;
     if (!isSafeProfileMediaPath(path, user.id, false, user)) {
       return c.json({ error: 'Profile image not found', code: 'profile_media_not_found' }, 404);
@@ -966,7 +974,7 @@ app.post('/api/profile/update', authenticateUser, async (c) => {
   try {
     const user = c.get('user');
     const supabase = createSupabaseClient(c.env);
-    const { photo, counts, personalPlan } = await c.req.json();
+    const { photo, counts, personalPlan } = await readJson(c);
     if (photo !== undefined && photo !== '' && !isSafeProfileMediaPath(photo, user.id, false, user)) return c.json({ error: 'Invalid profile image path', code: 'profile_media_invalid_path' }, 400);
     if (counts !== undefined && !validProfileCounts(counts)) return c.json({ error: 'Invalid profile counts', code: 'profile_invalid_counts' }, 400);
     const updates: any = { updated_at: new Date().toISOString() };
@@ -990,7 +998,7 @@ app.post('/api/profile/disciples', authenticateUser, async (c) => {
   try {
     const user = c.get('user');
     const supabase = createSupabaseClient(c.env);
-    const { action, discipleId, name, description, photo } = await c.req.json();
+    const { action, discipleId, name, description, photo } = await readJson(c);
     if (!['add', 'edit', 'delete'].includes(action)) return c.json({ error: 'Invalid disciple action', code: 'profile_invalid_action' }, 400);
     if (discipleId !== undefined && (typeof discipleId !== 'string' || discipleId.length > 100)) return c.json({ error: 'Invalid disciple ID', code: 'profile_invalid_id' }, 400);
     if (name !== undefined && !validProfileText(name, PROFILE_MAX_NAME_LENGTH, action === 'add')) return c.json({ error: 'Invalid disciple name', code: 'profile_invalid_name' }, 400);
@@ -1020,7 +1028,7 @@ app.post('/api/profile/groups', authenticateUser, async (c) => {
   try {
     const user = c.get('user');
     const supabase = createSupabaseClient(c.env);
-    const { action, groupId, title, description, photo, memberIds } = await c.req.json();
+    const { action, groupId, title, description, photo, memberIds } = await readJson(c);
     if (!['add', 'edit', 'delete'].includes(action)) return c.json({ error: 'Invalid group action', code: 'profile_invalid_action' }, 400);
     if (groupId !== undefined && (typeof groupId !== 'string' || groupId.length > 100)) return c.json({ error: 'Invalid group ID', code: 'profile_invalid_id' }, 400);
     if (title !== undefined && !validProfileText(title, PROFILE_MAX_NAME_LENGTH, action === 'add')) return c.json({ error: 'Invalid group title', code: 'profile_invalid_title' }, 400);
@@ -1088,7 +1096,7 @@ app.post('/api/videos/register', authenticateUser, async (c) => {
       return c.json({ error: 'Forbidden - Insufficient permissions' }, 403);
     }
     const supabase = createSupabaseClient(c.env);
-    const { title, description, fileName, mimeType, sizeBytes, storagePath, parts, type } = await c.req.json();
+    const { title, description, fileName, mimeType, sizeBytes, storagePath, parts, type } = await readJson(c);
     if (type !== 'photo') {
       return c.json({ error: 'Direct video uploads are disabled. Use a YouTube URL.', code: 'youtube_only' }, 410);
     }
@@ -1098,7 +1106,7 @@ app.post('/api/videos/register', authenticateUser, async (c) => {
     if (!title || String(title).length > 200 || String(description || '').length > 5000) {
       return c.json({ error: 'Invalid title or description' }, 400);
     }
-    if (!ALLOWED_MEDIA_TYPES.has(normalizedMime) || (mediaType === 'photo' && !normalizedMime.startsWith('image/')) || (mediaType === 'video' && !normalizedMime.startsWith('video/'))) {
+    if (!ALLOWED_MEDIA_TYPES.has(normalizedMime) || (mediaType === 'photo' && !normalizedMime.startsWith('image/')) || false) {
       return c.json({ error: 'Unsupported media type', code: 'unsupported_media_type' }, 400);
     }
     if (!Number.isSafeInteger(normalizedSize) || normalizedSize <= 0 || normalizedSize > MAX_MEDIA_BYTES) {
