@@ -69,6 +69,7 @@ export const translations = {
     uploadPhoto: 'تحميل صورة',
     save: 'حفظ والتحديث',
     actionInProgress: 'جارٍ تنفيذ العملية...',
+    groupsLoading: 'جاري تحميل المجموعات، يرجى الانتظار...',
     cancel: 'إلغاء',
     
     // Library
@@ -141,16 +142,6 @@ export const translations = {
     adminDataProtectionLimits: 'الصور الشخصية والمرفوعة: حتى 5 MB وبأنواع JPG أو PNG أو WebP. الخطة الشخصية حتى 10,000 حرف. حد المجموعات 20، والتلاميذ 50، وأعضاء المجموعة 100.',
     profileMediaUploadFailed: 'فشل رفع الصورة. تأكد من النوع والحجم ثم حاول مرة أخرى.',
     profileMediaInvalidType: 'الصورة يجب أن تكون JPG أو PNG أو WebP وبحجم لا يتجاوز 5 MB.',
-    profileMediaMigrationTitle: 'ترحيل الصور القديمة إلى التخزين الخاص',
-    profileMediaMigrationDescription: 'معاينة فقط. لن يتم نقل أو حذف أي صورة.',
-    profileMediaMigrationPreview: 'معاينة الصور القديمة',
-    profileMediaMigrationFound: 'عدد الصور القديمة',
-    profileMediaMigrationCharacters: 'حرفًا',
-    profileMediaMigrationNone: 'لا توجد صور قديمة تحتاج إلى ترحيل.',
-    profileMediaMigrationFailed: 'فشلت معاينة الصور القديمة.',
-    profileMediaMigrationExecute: 'تنفيذ نقل الصور الأربع',
-    profileMediaMigrationConfirm: 'سيتم نقل الصور الأربع وحفظ نسخة احتياطية منها. هل تريد المتابعة؟',
-    profileMediaMigrationCompleted: 'تم نقل الصور بنجاح',
     // Common
     requiredField: 'هذا الحقل مطلوب',
     passwordsDoNotMatch: 'كلمتا المرور غير متطابقتين',
@@ -247,6 +238,7 @@ export const translations = {
     uploadPhoto: 'Upload Photo',
     save: 'Save Changes',
     actionInProgress: 'Action in progress...',
+    groupsLoading: 'Loading groups, please wait...',
     cancel: 'Cancel',
     
     // Library
@@ -319,16 +311,6 @@ export const translations = {
     adminDataProtectionLimits: 'Profile and uploaded images: up to 5 MB in JPG, PNG, or WebP. Personal plan up to 10,000 characters. Limits: 20 groups, 50 disciples, and 100 members per group.',
     profileMediaUploadFailed: 'Image upload failed. Check the type and size, then try again.',
     profileMediaInvalidType: 'The image must be JPG, PNG, or WebP and no larger than 5 MB.',
-    profileMediaMigrationTitle: 'Migrate legacy images to private Storage',
-    profileMediaMigrationDescription: 'Preview only. No image will be moved or deleted.',
-    profileMediaMigrationPreview: 'Preview legacy images',
-    profileMediaMigrationFound: 'Legacy images found',
-    profileMediaMigrationCharacters: 'characters',
-    profileMediaMigrationNone: 'No legacy images need migration.',
-    profileMediaMigrationFailed: 'Legacy image preview failed.',
-    profileMediaMigrationExecute: 'Migrate the four images',
-    profileMediaMigrationConfirm: 'The four images will be migrated and backed up. Continue?',
-    profileMediaMigrationCompleted: 'Images migrated successfully',
     // Common
     requiredField: 'This field is required',
     passwordsDoNotMatch: 'Passwords do not match',
