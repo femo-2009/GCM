@@ -22,23 +22,31 @@ export default function App() {
   const [groups, setGroups] = useState<Group[]>([]);
   const [currentTab, setCurrentTab] = useState('home');
 
-  // One-step back for phone/tablet/laptop: tab changes push history so hardware back goes one tab back, not exit app
+  // One-step back for phone/tablet/laptop: tab changes push history so hardware back goes one tab back, not exit app - stays on same page
   const navigateTab = (tab: string) => {
     if (tab === currentTab) return;
-    try { window.history.pushState({ tab: currentTab }, '', `?tab=${tab}`); } catch {}
+    try { window.history.pushState({ tab }, '', `?tab=${tab}`); } catch {}
     setCurrentTab(tab);
   };
 
   useEffect(() => {
+    // On fresh load, ensure history has current tab so back from modal stays on same page, not home
+    try { window.history.replaceState({ tab: currentTab }, '', `?tab=${currentTab}`); } catch {}
+  }, []);
+
+  useEffect(() => {
     const onPop = (e: PopStateEvent) => {
-      const prevTab = (e.state as any)?.tab;
-      if (prevTab && typeof prevTab === 'string') {
-        setCurrentTab(prevTab);
+      const tab = (e.state as any)?.tab;
+      if (tab && typeof tab === 'string' && tab !== currentTab) {
+        setCurrentTab(tab);
+      } else if (!tab && !e.state?.modal) {
+        // No tab in state and not a modal pop - stay on same page (don't go home)
+        try { window.history.pushState({ tab: currentTab }, '', `?tab=${currentTab}`); } catch {}
       }
     };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
-  }, []);
+  }, [currentTab]);
 
   const t = translations[lang];
 
