@@ -47,6 +47,7 @@ export default function HomeView({ lang, user, groups, setGroups, onNavigate }: 
   const [leaderPhotoPreview, setLeaderPhotoPreview] = useState('');
   const [leaderPhotoPosition, setLeaderPhotoPosition] = useState('50% 50%');
   const [leaderPhotoScale, setLeaderPhotoScale] = useState(1);
+  const [leaderEmail, setLeaderEmail] = useState('');
   const [isSavingLeader, setIsSavingLeader] = useState(false);
   const [isUploadingLeaderPhoto, setIsUploadingLeaderPhoto] = useState(false);
   const [isDraggingPhoto, setIsDraggingPhoto] = useState(false);
@@ -384,7 +385,8 @@ export default function HomeView({ lang, user, groups, setGroups, onNavigate }: 
             photo: photoToSend,
             groupId: leaderGroupId,
             photoPosition: leaderPhotoPosition || '50% 50%',
-            photoScale: leaderPhotoScale || 1
+            photoScale: leaderPhotoScale || 1,
+            email: leaderEmail.trim().toLowerCase()
           }),
         });
 
@@ -412,6 +414,7 @@ export default function HomeView({ lang, user, groups, setGroups, onNavigate }: 
         setLeaderPhotoPreview('');
         setLeaderPhotoPosition('50% 50%');
         setLeaderPhotoScale(1);
+        setLeaderEmail('');
         alert(lang === 'ar' ? 'تم حفظ القائد بنجاح' : 'Leader saved successfully');
       } catch (err: any) {
         console.error(err);
@@ -463,6 +466,7 @@ export default function HomeView({ lang, user, groups, setGroups, onNavigate }: 
     setLeaderPhoto('');
     setLeaderPhotoPosition((leader as any).photoPosition || '50% 50%');
     setLeaderPhotoScale((leader as any).photoScale || 1);
+    setLeaderEmail((leader as any).email || '');
     setIsAddingLeader(true);
   };
 
@@ -895,6 +899,7 @@ export default function HomeView({ lang, user, groups, setGroups, onNavigate }: 
                     setLeaderPhotoPreview('');
                     setLeaderPhotoPosition('50% 50%');
                     setLeaderPhotoScale(1);
+                    setLeaderEmail('');
                   }}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 shadow-md transition-colors cursor-pointer"
                 >
@@ -942,6 +947,18 @@ export default function HomeView({ lang, user, groups, setGroups, onNavigate }: 
                         ))}
                       </select>
                     </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">{lang === 'ar' ? 'بريد القائد (Gmail) - لمسؤول الخريطة' : 'Leader Gmail (for map manager)'} <span className="text-slate-400 font-normal text-[10px]">({lang === 'ar' ? 'اختياري' : 'optional'})</span></label>
+                    <input
+                      type="email"
+                      value={leaderEmail}
+                      onChange={(e) => setLeaderEmail(e.target.value)}
+                      placeholder="leader@gmail.com"
+                      className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-slate-900 focus:outline-none focus:border-indigo-600 text-xs font-mono"
+                    />
+                    <p className="text-[10px] text-slate-400 mt-1">{lang === 'ar' ? 'ابحث بهذا البريد في صفحة الفرق لتعيينه كمسؤول خريطة مجموعته' : 'Search this email in Groups page to assign as group map manager'}</p>
                   </div>
 
                   <div>

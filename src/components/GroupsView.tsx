@@ -1,6 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Users, Plus, Edit2, Trash2, X, Info, FolderOpen, Crown } from 'lucide-react';
+import { Users, Plus, Edit2, Trash2, X, Info, FolderOpen, Crown, Map as MapIcon } from 'lucide-react';
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+
+// Fix leaflet default icon for Vite
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+});
+
+const workingIcon = new L.Icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+  iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
+});
+const notWorkingIcon = new L.Icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-grey.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+  iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
+});
 import { Language, translations } from '../translations';
 import { User, Group, Leader } from '../types';
 import { supabase } from '../lib/supabase';
@@ -103,6 +125,24 @@ export default function GroupsView({ lang, user, groups, setGroups, onNavigate }
     };
   }, [selectedGroup]);
 
+  // Form states
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [photo, setPhoto] = useState('');
+  const [photoPreview, setPhotoPreview] = useState('');
+  const [governorate, setGovernorate] = useState('');
+  const [managerEmail, setManagerEmail] = useState('');
+  const [managerSearch, setManagerSearch] = useState('');
+  const [selectedLeaderIds, setSelectedLeaderIds] = useState<Set<string>>(new Set());
+
+  // Map modal states
+  const [mapGroup, setMapGroup] = useState<Group | null>(null);
+  const [mapChurches, setMapChurches] = useState<any[]>([]);
+  const [mapStatuses, setMapStatuses] = useState<Record<string, string>>({});
+  const [mapCounters, setMapCounters] = useState({ total: 0, working: 0, notWorking: 0 });
+  const [mapCanEdit, setMapCanEdit] = useState(false);
+  const [mapLoading, setMapLoading] = useState(false);
+
   useEffect(() => {
     if (!isAdding) return;
     const onPop = () => { setIsAdding(false); setEditingGroup(null); };
@@ -114,12 +154,18 @@ export default function GroupsView({ lang, user, groups, setGroups, onNavigate }
     };
   }, [isAdding]);
 
-  // Form states
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [photo, setPhoto] = useState('');
-  const [photoPreview, setPhotoPreview] = useState('');
-  const [selectedLeaderIds, setSelectedLeaderIds] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    if (!mapGroup) return;
+    const onPop = () => setMapGroup(null);
+    window.history.pushState({ modal: 'groupMap' }, '');
+    window.addEventListener('popstate', onPop, { once: true });
+    return () => {
+      window.removeEventListener('popstate', onPop);
+      if (window.history.state?.modal === 'groupMap') window.history.back();
+    };
+  }, [mapGroup]);
+
+  const EGYPT_GOVS = ['القاهرة','الجيزة','الإسكندرية','الدقهلية','البحر الأحمر','البحيرة','الفيوم','الغربية','الإسماعيلية','المنوفية','المنيا','القليوبية','الوادي الجديد','السويس','أسوان','أسيوط','بني سويف','بورسعيد','دمياط','الشرقية','جنوب سيناء','كفر الشيخ','مطروح','الأقصر','قنا','شمال سيناء','سوهاج'];
 
   const t = translations[lang];
 
@@ -149,6 +195,9 @@ export default function GroupsView({ lang, user, groups, setGroups, onNavigate }
         const endpoint = isEdit ? `/api/groups/${editingGroup.id}` : '/api/groups';
         const method = isEdit ? 'PUT' : 'POST';
 
+        if (!EGYPT_GOVS.includes(governorate) && governorate !== '') throw new Error(lang === 'ar' ? 'اختر محافظة صحيحة' : 'Select a valid governorate');
+        if (managerEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(managerEmail)) throw new Error(lang === 'ar' ? 'بريد المدير يجب أن يكون Gmail صحيح' : 'Manager email must be valid Gmail');
+
         const res = await fetch(endpoint, {
           method,
           headers: { 
@@ -158,7 +207,9 @@ export default function GroupsView({ lang, user, groups, setGroups, onNavigate }
           body: JSON.stringify({
             title,
             description,
-            photo
+            photo,
+            governorate,
+            managerEmail: managerEmail.trim().toLowerCase()
           }),
         });
 
@@ -248,9 +299,57 @@ export default function GroupsView({ lang, user, groups, setGroups, onNavigate }
     setDescription(group.description);
     setPhotoPreview(group.photo);
     setPhoto('');
+    setGovernorate((group as any).governorate || '');
+    setManagerEmail((group as any).managerEmail || '');
+    setManagerSearch('');
     // Pre-select leaders already assigned to this group
     setSelectedLeaderIds(new Set(leaders.filter((l) => l.groupId === group.id).map((l) => l.id)));
     setIsAdding(true);
+  };
+
+  const handleOpenMap = async (group: Group, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (!(group as any).governorate) {
+      alert(lang === 'ar' ? 'اختر محافظة للمجموعة أولاً من تعديل المجموعة' : 'Select a governorate for this group first via Edit');
+      return;
+    }
+    setMapGroup(group);
+    setMapLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`/api/groups/${group.id}/map`, { headers: { Authorization: `Bearer ${session?.access_token || ''}` } });
+      const data: any = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to load map');
+      setMapChurches(data.churches || []);
+      setMapStatuses(data.statuses || {});
+      setMapCounters(data.counters || { total: 0, working: 0, notWorking: 0 });
+      setMapCanEdit(!!data.canEdit);
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setMapLoading(false);
+    }
+  };
+
+  const handleToggleChurch = async (churchId: string) => {
+    if (!mapGroup || !mapCanEdit) return;
+    await withLoading(async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const res = await fetch(`/api/groups/${mapGroup.id}/map/church/${churchId}`, { method: 'PUT', headers: { Authorization: `Bearer ${session?.access_token || ''}` } });
+        const data: any = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed');
+        setMapStatuses(prev => ({ ...prev, [churchId]: data.status }));
+        setMapCounters(prev => {
+          const wasWorking = mapStatuses[churchId] === 'working';
+          const nowWorking = data.status === 'working';
+          if (wasWorking === nowWorking) return prev;
+          return { total: prev.total, working: nowWorking ? prev.working + 1 : prev.working - 1, notWorking: nowWorking ? prev.notWorking - 1 : prev.notWorking + 1 };
+        });
+      } catch (err: any) {
+        alert(err.message);
+      }
+    });
   };
 
   const handleDelete = async (id: string, e: React.MouseEvent) => {
@@ -322,6 +421,9 @@ export default function GroupsView({ lang, user, groups, setGroups, onNavigate }
               setDescription('');
               setPhoto('');
               setPhotoPreview('');
+              setGovernorate('');
+              setManagerEmail('');
+              setManagerSearch('');
               setSelectedLeaderIds(new Set());
             }}
             className="flex items-center gap-1.5 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 shadow-md transition-colors cursor-pointer"
@@ -400,10 +502,16 @@ export default function GroupsView({ lang, user, groups, setGroups, onNavigate }
                     })()}
                   </div>
 
+                  {(group as any).governorate && <div className="text-[10px] text-slate-500 mb-2 flex items-center gap-1"><span>📍</span> {(group as any).governorate} {(group as any).managerEmail && <span className="bg-amber-50 border border-amber-200 text-amber-700 px-1.5 py-0.5 rounded-full text-[9px]">{(group as any).managerEmail}</span>}</div>}
                   <div className="flex items-center justify-between border-t border-slate-100 pt-3 mt-auto">
-                    <span className="text-indigo-600 font-bold text-xs hover:underline flex items-center gap-1">
-                      <span>{t.open}</span>
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-indigo-600 font-bold text-xs hover:underline flex items-center gap-1">
+                        <span>{t.open}</span>
+                      </span>
+                      <button onClick={(e) => handleOpenMap(group, e)} className="flex items-center gap-1 px-2 py-1 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg text-emerald-700 text-[11px] font-bold transition-colors" title="Map">
+                        <span>🗺️</span> {lang === 'ar' ? 'خريطة' : 'Map'}
+                      </button>
+                    </div>
 
                     {canEditGroups && (
                       <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
@@ -505,6 +613,33 @@ export default function GroupsView({ lang, user, groups, setGroups, onNavigate }
                   />
                 </div>
 
+                {/* Governorate */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">{lang === 'ar' ? 'المحافظة (27 محافظة)' : 'Governorate (27)'} <span className="text-red-500">*</span></label>
+                  <select value={governorate} onChange={(e) => setGovernorate(e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl p-3 text-slate-900 focus:outline-none focus:border-indigo-600 text-sm">
+                    <option value="">{lang === 'ar' ? '-- اختر المحافظة --' : '-- Select Governorate --'}</option>
+                    {EGYPT_GOVS.map(g => <option key={g} value={g}>{g}</option>)}
+                  </select>
+                  <p className="text-[10px] text-slate-400 mt-1">{lang === 'ar' ? 'الخريطة ستعرض فقط كنائس هذه المحافظة' : 'Map will show only churches in this governorate'}</p>
+                </div>
+
+                {/* Manager Email (search leaders by gmail) */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">{lang === 'ar' ? 'مسؤول الخريطة (بريد Gmail للقائد)' : 'Map Manager (Leader Gmail)'} </label>
+                  <input type="email" value={managerEmail} onChange={(e) => { setManagerEmail(e.target.value); setManagerSearch(e.target.value); }} placeholder="leader@gmail.com" className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-slate-900 focus:outline-none focus:border-indigo-600 text-xs font-mono" />
+                  {managerSearch && (
+                    <div className="mt-1 max-h-32 overflow-y-auto border border-slate-200 rounded-xl bg-white shadow-sm">
+                      {leaders.filter(l => (l as any).email && (l as any).email.toLowerCase().includes(managerSearch.toLowerCase())).slice(0,5).map(l => (
+                        <button key={l.id} type="button" onClick={() => { setManagerEmail((l as any).email); setManagerSearch(''); }} className="w-full text-left px-3 py-2 hover:bg-indigo-50 text-xs flex items-center gap-2">
+                          <span className="font-bold">{l.name}</span><span className="text-slate-500 font-mono text-[11px]">{(l as any).email}</span>
+                        </button>
+                      ))}
+                      {leaders.filter(l => (l as any).email && (l as any).email.toLowerCase().includes(managerSearch.toLowerCase())).length === 0 && <div className="px-3 py-2 text-xs text-slate-400">{lang === 'ar' ? 'لا يوجد قائد بهذا البريد' : 'No leader with this email'}</div>}
+                    </div>
+                  )}
+                  <p className="text-[10px] text-slate-400 mt-1">{lang === 'ar' ? 'هذا القائد فقط (بجانب الأدمن) يمكنه التحكم في خريطة مجموعته' : 'Only this leader + admins can toggle this group map'}</p>
+                </div>
+
                 {/* Leader Assignment */}
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 mb-1.5 flex items-center gap-1.5">
@@ -602,6 +737,94 @@ export default function GroupsView({ lang, user, groups, setGroups, onNavigate }
                 >
                   {t.close}
                 </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Modal: Group Map - Google Maps style with OSM, two signs, 3 counters, safest */}
+        {mapGroup && (
+          <div className="fixed inset-0 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white border border-slate-200 rounded-3xl w-full max-w-4xl p-5 md:p-6 relative shadow-2xl max-h-[90vh] flex flex-col"
+            >
+              <button onClick={() => setMapGroup(null)} className="absolute top-4 right-4 z-[1000] p-2 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl text-slate-600 shadow-sm cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+
+              <div className="pr-8">
+                <h3 className="text-lg font-extrabold text-slate-900 flex items-center gap-2"><MapIcon className="w-5 h-5 text-emerald-600" /> {mapGroup.title} — {(mapGroup as any).governorate}</h3>
+                <p className="text-xs text-slate-500">{lang === 'ar' ? 'الكنائس من خرائط Google / OSM' : 'Churches from Google Maps / OSM'}</p>
+              </div>
+
+              {/* 3 counters */}
+              <div className="grid grid-cols-3 gap-3 mt-4">
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 text-center">
+                  <div className="text-2xl font-extrabold text-slate-900">{mapCounters.total}</div>
+                  <div className="text-[11px] font-bold text-slate-500">{lang === 'ar' ? 'الإجمالي' : 'Total'}</div>
+                </div>
+                <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3 text-center">
+                  <div className="text-2xl font-extrabold text-emerald-700">{mapCounters.working}</div>
+                  <div className="text-[11px] font-bold text-emerald-700">{lang === 'ar' ? 'نعمل معها' : 'Working'}</div>
+                </div>
+                <div className="bg-slate-100 border border-slate-200 rounded-2xl p-3 text-center">
+                  <div className="text-2xl font-extrabold text-slate-600">{mapCounters.notWorking}</div>
+                  <div className="text-[11px] font-bold text-slate-500">{lang === 'ar' ? 'لا نعمل' : 'Not working'}</div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 mt-3 text-[11px]">
+                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-emerald-500 border border-white shadow"></span> {lang === 'ar' ? 'نعمل' : 'Working'}</span>
+                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-slate-400 border border-white shadow"></span> {lang === 'ar' ? 'لا نعمل' : 'Not working'}</span>
+                {!mapCanEdit && <span className="ml-auto text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full text-[10px] font-bold">{lang === 'ar' ? 'عرض فقط' : 'View only'}</span>}
+              </div>
+
+              {/* Map */}
+              <div className="mt-4 h-[420px] rounded-2xl overflow-hidden border border-slate-200 shadow-inner bg-slate-50 relative">
+                {mapLoading ? (
+                  <div className="w-full h-full flex items-center justify-center text-slate-500 gap-2"><div className="w-5 h-5 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin" /> {lang === 'ar' ? 'جاري تحميل الخريطة...' : 'Loading map...'}</div>
+                ) : mapChurches.length === 0 ? (
+                  <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 gap-2 p-6 text-center">
+                    <MapIcon className="w-10 h-10" />
+                    <p className="text-sm">{lang === 'ar' ? 'لا توجد كنائس في هذه المحافظة بعد' : 'No churches in this governorate yet'}</p>
+                    <p className="text-xs">{lang === 'ar' ? 'سيتم إضافة الكنائس من Google Maps قريباً' : 'Churches will be added from Google Maps soon'}</p>
+                  </div>
+                ) : (
+                  // @ts-ignore - react-leaflet types
+                  <MapContainer center={mapChurches.length ? [mapChurches[0].lat, mapChurches[0].lng] as any : [30.05, 31.23] as any} zoom={11} style={{ height: '100%', width: '100%' } as any} scrollWheelZoom={true as any}>
+                    {/* @ts-ignore */}
+                    <TileLayer attribution='&copy; OpenStreetMap' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                    {mapChurches.map((church: any) => {
+                      const isWorking = mapStatuses[church.id] === 'working';
+                      return (
+                        // @ts-ignore
+                        <Marker key={church.id} position={[church.lat, church.lng] as any} icon={isWorking ? workingIcon : notWorkingIcon as any}>
+                          <Popup>
+                            <div className="min-w-[180px] space-y-2">
+                              <div className="font-bold text-sm">{church.name}</div>
+                              <div className="text-xs text-slate-500">{church.address}</div>
+                              <div className={`text-xs font-bold px-2 py-1 rounded-full inline-block ${isWorking ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>{isWorking ? (lang === 'ar' ? 'نعمل معها' : 'Working') : (lang === 'ar' ? 'لا نعمل' : 'Not working')}</div>
+                              {mapCanEdit ? (
+                                <button onClick={() => handleToggleChurch(church.id)} className={`w-full mt-2 py-1.5 rounded-xl text-xs font-bold text-white ${isWorking ? 'bg-slate-500 hover:bg-slate-600' : 'bg-emerald-600 hover:bg-emerald-700'}`}>
+                                  {isWorking ? (lang === 'ar' ? 'إيقاف العمل' : 'Stop working') : (lang === 'ar' ? 'بدء العمل' : 'Start working')}
+                                </button>
+                              ) : (
+                                <div className="text-[11px] text-amber-600">{lang === 'ar' ? 'ليس لديك صلاحية التعديل' : 'No permission to edit'}</div>
+                              )}
+                            </div>
+                          </Popup>
+                        </Marker>
+                      );
+                    })}
+                  </MapContainer>
+                )}
+              </div>
+
+              <div className="flex justify-end mt-4">
+                <button onClick={() => setMapGroup(null)} className="px-5 py-2 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 cursor-pointer">{t.close}</button>
               </div>
             </motion.div>
           </div>
