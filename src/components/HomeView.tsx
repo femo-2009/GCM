@@ -1070,50 +1070,61 @@ export default function HomeView({ lang, user, groups, setGroups, onNavigate }: 
           </div>
         )}
 
-        {/* Modal: Leader Details (Big Window) */}
+        {/* Modal: Leader Details (Bigger Window - better photo display) */}
         {selectedLeader && (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
             <motion.div 
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white border border-slate-200 rounded-3xl w-full max-w-md p-6 relative shadow-2xl"
+              className="bg-white border border-slate-200 rounded-3xl w-full max-w-2xl relative shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
             >
               <button 
                 onClick={() => setSelectedLeader(null)}
-                className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-900 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+                className="absolute top-3 right-3 z-20 p-2 bg-black/40 hover:bg-black/60 text-white rounded-full backdrop-blur transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
 
-              <div className="space-y-4 text-center">
-                <div className="w-28 h-28 mx-auto rounded-full overflow-hidden border-2 border-indigo-600 shadow-xl bg-slate-100">
-                  <img src={selectedLeader.photo} alt={selectedLeader.name} className="w-full h-full object-cover" style={{ objectPosition: (selectedLeader as any).photoPosition || '50% 50%', transform: `scale(${(selectedLeader as any).photoScale || 1})`, transformOrigin: (selectedLeader as any).photoPosition || '50% 50%' }} />
-                </div>
-
-                <div className="pt-2">
-                  <h3 className="text-lg font-bold text-slate-900">{selectedLeader.name}</h3>
+              {/* Big photo display - fully visible, WhatsApp fit */}
+              <div className="relative w-full h-[380px] sm:h-[420px] bg-slate-900 overflow-hidden shrink-0 flex items-center justify-center">
+                {selectedLeader.photo ? (
+                  <>
+                    <img src={selectedLeader.photo} alt="" aria-hidden className="absolute inset-0 w-full h-full object-cover blur-2xl opacity-30 scale-110 pointer-events-none" style={{ objectPosition: (selectedLeader as any).photoPosition || '50% 50%' }} />
+                    <img src={selectedLeader.photo} alt={selectedLeader.name} className="relative w-full h-full object-contain" style={{ objectPosition: (selectedLeader as any).photoPosition || '50% 50%', transform: `scale(${(selectedLeader as any).photoScale || 1})`, transformOrigin: (selectedLeader as any).photoPosition || '50% 50%' }} referrerPolicy="no-referrer" />
+                  </>
+                ) : (
+                  <div className="w-full h-full flex flex-col items-center justify-center text-white/50 gap-2">
+                    <HelpCircle className="w-12 h-12" />
+                    <span className="text-xs">{lang === 'ar' ? 'لا توجد صورة' : 'No photo'}</span>
+                  </div>
+                )}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent pointer-events-none" />
+                <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/70 to-transparent">
+                  <h3 className="text-xl sm:text-2xl font-extrabold text-white drop-shadow-lg">{selectedLeader.name}</h3>
                   {groups.find((g) => g.id === selectedLeader.groupId) && (
                     <button
                       onClick={() => { setSelectedLeader(null); localStorage.setItem('highlightGroupId', selectedLeader.groupId); onNavigate?.('groups'); }}
-                      className="inline-flex items-center gap-1 bg-indigo-50 hover:bg-indigo-100 border border-indigo-150 rounded-full px-3 py-1 mt-1 text-[11px] font-bold text-indigo-700 cursor-pointer transition-colors"
+                      className="inline-flex items-center gap-1 bg-white/20 hover:bg-white/30 backdrop-blur text-white border border-white/20 rounded-full px-3 py-1 mt-2 text-xs font-bold cursor-pointer transition-colors"
                     >
                       {groups.find((g) => g.id === selectedLeader.groupId)?.title}
-                      <span className="text-[9px]">{lang === 'ar' ? '←' : '→'}</span>
+                      <span className="text-[10px]">{lang === 'ar' ? '←' : '→'}</span>
                     </button>
                   )}
                 </div>
+              </div>
 
-                <div className="text-right p-4 bg-slate-50 border border-slate-200 rounded-2xl max-h-44 overflow-y-auto">
-                  <p className="text-slate-600 text-xs md:text-sm leading-relaxed whitespace-pre-line font-sans" style={{ direction: lang === 'ar' ? 'rtl' : 'ltr' }}>
+              <div className="p-5 sm:p-6 space-y-4 overflow-y-auto">
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 max-h-48 overflow-y-auto">
+                  <p className="text-slate-700 text-sm leading-relaxed whitespace-pre-line font-sans" style={{ direction: lang === 'ar' ? 'rtl' : 'ltr' }}>
                     {selectedLeader.description || (lang === 'ar' ? 'لا يوجد وصف مضاف.' : 'No description added.')}
                   </p>
                 </div>
 
-                <div className="flex justify-end pt-2">
+                <div className="flex justify-end">
                   <button
                     onClick={() => setSelectedLeader(null)}
-                    className="px-4 py-2 bg-indigo-600 text-white font-bold rounded-xl text-xs hover:bg-indigo-750 transition-colors cursor-pointer"
+                    className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-sm shadow-md transition-colors cursor-pointer"
                   >
                     {t.close}
                   </button>
