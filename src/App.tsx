@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { Language, translations } from './translations';
 import { User, Group } from './types';
 import { supabase } from './lib/supabase';
@@ -124,18 +125,28 @@ export default function App() {
           user={user}
           onLogout={handleLogout}
         />
-        <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pb-12">
-          {currentTab === 'home' && (
-            <HomeView lang={lang} user={user} groups={groups} setGroups={setGroups} onNavigate={navigateTab} />
-          )}
-          {currentTab === 'library' && <LibraryView lang={lang} user={user} />}
-          {currentTab === 'groups' && (
-            <GroupsView lang={lang} user={user} groups={groups} setGroups={setGroups} onNavigate={navigateTab} />
-          )}
-          {currentTab === 'gcm' && (
-            <GCMView lang={lang} user={user} onUserUpdate={handleUserUpdate} />
-          )}
-          {currentTab === 'admin' && <AdminPanelView lang={lang} user={user} />}
+        <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pb-24 md:pb-12">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={currentTab}
+              initial={{ opacity: 0, y: 8, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -8, scale: 0.98 }}
+              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+            >
+              {currentTab === 'home' && (
+                <HomeView lang={lang} user={user} groups={groups} setGroups={setGroups} onNavigate={navigateTab} />
+              )}
+              {currentTab === 'library' && <LibraryView lang={lang} user={user} />}
+              {currentTab === 'groups' && (
+                <GroupsView lang={lang} user={user} groups={groups} setGroups={setGroups} onNavigate={navigateTab} />
+              )}
+              {currentTab === 'gcm' && (
+                <GCMView lang={lang} user={user} onUserUpdate={handleUserUpdate} />
+              )}
+              {currentTab === 'admin' && <AdminPanelView lang={lang} user={user} />}
+            </motion.div>
+          </AnimatePresence>
         </main>
         <LoadingBar />
         <footer className="border-t border-slate-200 bg-white py-8 text-center text-xs text-slate-500">
