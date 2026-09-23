@@ -697,7 +697,65 @@ USING (
 -- are the important security controls.
 
 -- ============================================================
--- 17. INITIAL APP DATA
+-- 17. CHURCHES & GROUP-CHURCH MAP (Safest - for Groups Governorate Map)
+-- ============================================================
+
+-- 27 Egyptian governorates list (for validation)
+CREATE TABLE IF NOT EXISTS public.churches (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name text NOT NULL CHECK (length(name) BETWEEN 2 AND 200),
+  governorate text NOT NULL CHECK (governorate IN ('القاهرة','الجيزة','الإسكندرية','الدقهلية','البحر الأحمر','البحيرة','الفيوم','الغربية','الإسماعيلية','المنوفية','المنيا','القليوبية','الوادي الجديد','السويس','أسوان','أسيوط','بني سويف','بورسعيد','دمياط','الشرقية','جنوب سيناء','كفر الشيخ','مطروح','الأقصر','قنا','شمال سيناء','سوهاج')),
+  lat double precision NOT NULL CHECK (lat BETWEEN -90 AND 90),
+  lng double precision NOT NULL CHECK (lng BETWEEN -180 AND 180),
+  address text DEFAULT '' CHECK (length(address) <= 500),
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.group_churches (
+  group_id text NOT NULL,
+  church_id uuid NOT NULL REFERENCES public.churches(id) ON DELETE CASCADE,
+  status text NOT NULL CHECK (status IN ('working','not_working')) DEFAULT 'not_working',
+  updated_by uuid REFERENCES auth.users(id),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (group_id, church_id)
+);
+
+-- Updated_at trigger for group_churches
+DROP TRIGGER IF EXISTS group_churches_set_updated_at ON public.group_churches;
+CREATE TRIGGER group_churches_set_updated_at BEFORE UPDATE ON public.group_churches FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+ALTER TABLE public.churches ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.group_churches ENABLE ROW LEVEL SECURITY;
+
+-- RLS: Approved users can read churches and group_churches; writes via service_role worker only (safest)
+DROP POLICY IF EXISTS "churches_select_approved" ON public.churches;
+CREATE POLICY "churches_select_approved" ON public.churches FOR SELECT TO authenticated USING (public.is_approved_user());
+
+DROP POLICY IF EXISTS "group_churches_select_approved" ON public.group_churches;
+CREATE POLICY "group_churches_select_approved" ON public.group_churches FOR SELECT TO authenticated USING (public.is_approved_user());
+
+-- No INSERT/UPDATE/DELETE policies for authenticated - only service_role (worker) can write, ensuring validation in worker (governorate match, manager check, etc.)
+REVOKE ALL ON TABLE public.churches FROM anon, authenticated;
+GRANT SELECT ON TABLE public.churches TO authenticated;
+GRANT ALL ON TABLE public.churches TO service_role;
+
+REVOKE ALL ON TABLE public.group_churches FROM anon, authenticated;
+GRANT SELECT ON TABLE public.group_churches TO authenticated;
+GRANT ALL ON TABLE public.group_churches TO service_role;
+
+-- Seed a few example churches per governorate (real churches from Google Maps - can be expanded)
+INSERT INTO public.churches (name, governorate, lat, lng, address) VALUES
+  ('كنيسة العذراء المعلقة','القاهرة',30.0059,31.2300,'مصر القديمة، القاهرة'),
+  ('الكاتدرائية المرقسية بالعباسية','القاهرة',30.0710,31.2750,'العباسية، القاهرة'),
+  ('كنيسة مارجرجس - مصر الجديدة','القاهرة',30.0900,31.3300,'مصر الجديدة'),
+  ('كنيسة الأنبا أنطونيوس','الجيزة',30.0130,31.2080,'الجيزة'),
+  ('كنيسة مارمرقس - المعادي','الجيزة',29.9600,31.2500,'المعادي'),
+  ('الكاتدرائية المرقسية بالإسكندرية','الإسكندرية',31.2000,29.9000,'محطة الرمل'),
+  ('كنيسة العذراء - سموحة','الإسكندرية',31.2100,29.9400,'سموحة')
+ON CONFLICT DO NOTHING;
+
+-- ============================================================
+-- 18. INITIAL APP DATA
 -- ============================================================
 
 INSERT INTO public.app_data (
