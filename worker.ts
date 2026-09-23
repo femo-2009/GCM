@@ -1040,11 +1040,17 @@ app.post('/api/leader-media/upload', authenticateUser, async (c) => {
       cacheControl: '3600',
       upsert: false,
     });
-    if (error) throw error;
+    if (error) {
+      console.error('leader-media upload error:', error.message);
+      // If bucket missing, give clear message to run SQL
+      const isBucketMissing = /bucket.*not found|No such bucket/i.test(error.message || '');
+      return c.json({ error: isBucketMissing ? 'Storage bucket "leader-media" not found. Please run supabase-setup.sql in Supabase SQL Editor.' : error.message || 'Failed to upload leader image', code: isBucketMissing ? 'bucket_missing' : 'leader_media_upload_failed' }, 500);
+    }
     await writeAuditLog(supabase, c, user.id, 'upload_leader_media', 'leader_media', path, { size_bytes: file.size, content_type: contentType });
     return c.json({ path });
   } catch (error: any) {
-    return c.json({ error: 'Failed to upload leader image', code: 'leader_media_upload_failed' }, 500);
+    console.error('leader-media upload exception:', error?.message || error);
+    return c.json({ error: error?.message || 'Failed to upload leader image', code: 'leader_media_upload_failed' }, 500);
   }
 });
 
