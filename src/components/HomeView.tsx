@@ -926,8 +926,8 @@ export default function HomeView({ lang, user, groups, setGroups, onNavigate }: 
                               <span className="text-[11px] font-semibold text-slate-600">{lang === 'ar' ? 'تكبير' : 'Zoom'}</span>
                               <span className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded font-mono">{leaderPhotoScale.toFixed(1)}x</span>
                             </div>
-                            <input type="range" min={1} max={3} step={0.1} value={leaderPhotoScale} onChange={(e) => setLeaderPhotoScale(parseFloat(e.target.value))} className="w-full accent-indigo-600" />
-                            <div className="flex justify-between text-[9px] text-slate-400"><span>1x</span><span>3x</span></div>
+                            <input type="range" min={0.5} max={3} step={0.1} value={leaderPhotoScale} onChange={(e) => setLeaderPhotoScale(parseFloat(e.target.value))} className="w-full accent-indigo-600" />
+                            <div className="flex justify-between text-[9px] text-slate-400"><span>0.5x {lang === 'ar' ? 'تصغير' : 'shrink'}</span><span>3x {lang === 'ar' ? 'تكبير' : 'zoom'}</span></div>
                           </div>
                         )}
                       </div>

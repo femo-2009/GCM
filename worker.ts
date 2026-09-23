@@ -629,7 +629,7 @@ app.post('/api/leaders', authenticateUser, async (c) => {
     if (description !== undefined && !validLeaderText(description, 5000)) return c.json({ error: 'Description is too long (max 5000)', code: 'invalid_description' }, 400);
     if (photo !== undefined && !isValidLeaderPhoto(photo, true)) return c.json({ error: 'Invalid photo', code: 'invalid_photo' }, 400);
     if (photoPosition !== undefined && !validLeaderPhotoPosition(photoPosition)) return c.json({ error: 'Invalid photo position', code: 'invalid_photo_position' }, 400);
-    if (photoScale !== undefined && !validLeaderPhotoScale(photoScale)) return c.json({ error: 'Invalid photo scale (1-3)', code: 'invalid_photo_scale' }, 400);
+    if (photoScale !== undefined && !validLeaderPhotoScale(photoScale)) return c.json({ error: 'Invalid photo scale (0.5-3)', code: 'invalid_photo_scale' }, 400);
     if (groupId && typeof groupId === 'string' && groupId !== '') {
       if (groupId.length > 100) return c.json({ error: 'Invalid group', code: 'invalid_group' }, 400);
     }
@@ -976,7 +976,7 @@ function validLeaderPhotoPosition(value: unknown): boolean {
 function validLeaderPhotoScale(value: unknown): boolean {
   if (value === undefined || value === null || value === '') return true;
   const n = typeof value === 'string' ? parseFloat(value) : typeof value === 'number' ? value : NaN;
-  return Number.isFinite(n) && n >= 1 && n <= 3;
+  return Number.isFinite(n) && n >= 0.5 && n <= 3;
 }
 
 function isValidLeaderPhoto(value: unknown, isLegacyBase64Allowed = true): boolean {

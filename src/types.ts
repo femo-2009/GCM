@@ -49,7 +49,7 @@ export interface Leader {
   description: string;
   groupId: string; // group this leader belongs to
   photoPosition?: string; // CSS object-position for slider preview (e.g. "center", "50% 30%") - WhatsApp-style drag position
-  photoScale?: number; // WhatsApp-style zoom 1..3
+  photoScale?: number; // WhatsApp-style zoom 0.5..3 (تصغير + تكبير)
 }
 
 export interface Group {
