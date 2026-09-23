@@ -521,12 +521,14 @@ export default function HomeView({ lang, user, groups, setGroups, onNavigate }: 
                     key={`${leader.id}-${index}`}
                     className="w-[200px] sm:w-[260px] shrink-0 bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm flex flex-col group hover:border-indigo-500/30 transition-all duration-300"
                   >
-                    <div className="relative h-32 sm:h-44 overflow-hidden bg-slate-100">
+                    <div className="relative h-32 sm:h-44 overflow-hidden bg-white flex items-center justify-center">
+                      {/* blurred cover bg for nice fill when contain */}
+                      {leader.photo && <img src={leader.photo} alt="" aria-hidden className="absolute inset-0 w-full h-full object-cover blur-xl opacity-20 scale-110 pointer-events-none" style={{ objectPosition: (leader as any).photoPosition || '50% 50%' }} />}
                       <img 
                         src={leader.photo} 
                         alt={leader.name}
                         referrerPolicy="no-referrer"
-                        className="w-full h-full object-cover transition-all duration-500"
+                        className="relative w-full h-full object-contain bg-white transition-all duration-500"
                         style={{ objectPosition: (leader as any).photoPosition || '50% 50%', transform: `scale(${(leader as any).photoScale || 1})`, transformOrigin: (leader as any).photoPosition || '50% 50%' }}
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 via-transparent to-transparent opacity-85" />
@@ -963,17 +965,16 @@ export default function HomeView({ lang, user, groups, setGroups, onNavigate }: 
                       <div className="space-y-2.5">
                         <span className="text-[11px] font-bold text-emerald-700 flex items-center gap-1"><span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />{lang === 'ar' ? 'معاينة السلايدر الحقيقية' : 'Live slider card'}</span>
                         <div className="w-full max-w-[260px] mx-auto bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-md">
-                          <div className="relative h-44 overflow-hidden bg-slate-100">
+                          <div className="relative h-44 overflow-hidden bg-white flex items-center justify-center">
                             {leaderPhotoPreview ? (
-                              <img src={leaderPhotoPreview} alt="Slider Preview" className="w-full h-full object-cover" style={{ objectPosition: leaderPhotoPosition, transform: `scale(${leaderPhotoScale})`, transformOrigin: leaderPhotoPosition }} />
+                              <>
+                                <img src={leaderPhotoPreview} alt="" aria-hidden className="absolute inset-0 w-full h-full object-cover blur-xl opacity-20 scale-110 pointer-events-none" style={{ objectPosition: leaderPhotoPosition }} />
+                                <img src={leaderPhotoPreview} alt="Slider Preview" className="relative w-full h-full object-contain bg-white" style={{ objectPosition: leaderPhotoPosition, transform: `scale(${leaderPhotoScale})`, transformOrigin: leaderPhotoPosition }} />
+                              </>
                             ) : (
                               <div className="w-full h-full flex items-center justify-center text-slate-300"><HelpCircle className="w-8 h-8" /></div>
                             )}
-                            <div className="absolute inset-0 bg-gradient-to-t from-slate-900/50 via-transparent to-transparent" />
-                            <div className="absolute bottom-2 left-2 right-2 bg-white/95 backdrop-blur rounded-xl px-3 py-2">
-                              <div className="h-3 w-20 bg-slate-800 rounded mb-1" />
-                              <div className="h-2 w-full bg-slate-400 rounded opacity-60" />
-                            </div>
+                            <div className="absolute inset-0 bg-gradient-to-t from-slate-900/10 via-transparent to-transparent pointer-events-none" />
                           </div>
                         </div>
                         <p className="text-[10px] text-slate-500 text-center leading-relaxed">{lang === 'ar' ? 'هذه المعاينة مطابقة 100% لما سيظهر في سلايدر الصفحة الرئيسية' : 'This preview is 100% identical to the home slider'}</p>
