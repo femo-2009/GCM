@@ -352,6 +352,27 @@ export default function GroupsView({ lang, user, groups, setGroups, onNavigate }
     });
   };
 
+  const handleSyncRealChurches = async () => {
+    if (!mapGroup) return;
+    const gov = (mapGroup as any).governorate;
+    if (!gov) return;
+    if (!confirm(lang === 'ar' ? `جلب الكنائس الحقيقية لمحافظة ${gov} من خرائط Google/OSM؟` : `Fetch real churches for ${gov} from Google Maps/OSM?`)) return;
+    setMapLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/churches/sync', { method: 'POST', headers: { Authorization: `Bearer ${session?.access_token || ''}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ governorate: gov }) });
+      const data: any = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Sync failed');
+      alert(lang === 'ar' ? `تم جلب ${data.fetched} كنيسة حقيقية، أضيف ${data.inserted} جديدة` : `Fetched ${data.fetched} real churches, inserted ${data.inserted} new`);
+      // reload map
+      await handleOpenMap(mapGroup);
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setMapLoading(false);
+    }
+  };
+
   const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!confirm(lang === 'ar' ? 'هل أنت متأكد من حذف هذه المجموعة؟ جميع القادة المرتبطين بها سيصبحون غير مرتبطين.' : 'Are you sure you want to delete this group? All linked leaders will be unlinked.')) return;
@@ -781,6 +802,12 @@ export default function GroupsView({ lang, user, groups, setGroups, onNavigate }
                 <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-slate-400 border border-white shadow"></span> {lang === 'ar' ? 'لا نعمل' : 'Not working'}</span>
                 {!mapCanEdit && <span className="ml-auto text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full text-[10px] font-bold">{lang === 'ar' ? 'عرض فقط' : 'View only'}</span>}
               </div>
+
+              {mapCanEdit && (
+                <button onClick={handleSyncRealChurches} disabled={mapLoading} className="mt-3 w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-md">
+                  <span>🔄</span> {lang === 'ar' ? 'جلب الكنائس الحقيقية من Google Maps' : 'Fetch real churches from Google Maps'}
+                </button>
+              )}
 
               {/* Map */}
               <div className="mt-4 h-[420px] rounded-2xl overflow-hidden border border-slate-200 shadow-inner bg-slate-50 relative">
