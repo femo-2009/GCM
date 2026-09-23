@@ -874,8 +874,22 @@ app.get('/api/groups/:id/map', authenticateUser, async (c) => {
     if (!group) return c.json({ error: 'Group not found' }, 404);
     const governorate = group.governorate;
     if (!governorate || !isValidGovernorate(governorate)) return c.json({ churches: [], statuses: {}, counters: { total: 0, working: 0, notWorking: 0 }, canEdit: false, governorate: '' });
-    // Fast: return existing churches instantly (no blocking Overpass fetch). Real churches via manual sync button.
+    // Fast: return existing churches instantly, then auto-fetch real churches in background if needed (no manual button)
     const { data: churches } = await supabase.from('churches').select('*').eq('governorate', governorate).order('name');
+    // Auto-sync real Google Maps churches in background if less than 5 (so map shows all without manual)
+    if (churches && churches.length < 5) {
+      const bgFetch = (async () => {
+        try {
+          const real = await fetchRealChurchesFromOverpass(governorate);
+          for (const ch of real) {
+            const { data: dup } = await supabase.from('churches').select('id').eq('governorate', governorate).eq('name', ch.name).limit(1).maybeSingle();
+            if (dup) continue;
+            await supabase.from('churches').insert({ name: ch.name, governorate, lat: ch.lat, lng: ch.lng, address: ch.address });
+          }
+        } catch {}
+      })();
+      try { (c.executionCtx as any)?.waitUntil?.(bgFetch); } catch {}
+    }
     const { data: statuses } = await supabase.from('group_churches').select('church_id,status').eq('group_id', id);
     const statusMap: Record<string, string> = {};
     (statuses || []).forEach((s: any) => statusMap[s.church_id] = s.status);

@@ -803,13 +803,7 @@ export default function GroupsView({ lang, user, groups, setGroups, onNavigate }
                 {!mapCanEdit && <span className="ml-auto text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full text-[10px] font-bold">{lang === 'ar' ? 'عرض فقط' : 'View only'}</span>}
               </div>
 
-              {mapCanEdit && (
-                <button onClick={handleSyncRealChurches} disabled={mapLoading} className="mt-3 w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-md">
-                  <span>🔄</span> {lang === 'ar' ? 'جلب الكنائس الحقيقية من Google Maps' : 'Fetch real churches from Google Maps'}
-                </button>
-              )}
-
-              {/* Map */}
+              {/* Map - auto shows real churches, no manual button needed */}
               <div className="mt-4 h-[420px] rounded-2xl overflow-hidden border border-slate-200 shadow-inner bg-slate-50 relative">
                 {mapLoading ? (
                   <div className="w-full h-full flex items-center justify-center text-slate-500 gap-2"><div className="w-5 h-5 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin" /> {lang === 'ar' ? 'جاري تحميل الخريطة...' : 'Loading map...'}</div>
