@@ -390,7 +390,8 @@ app.get('/api/admin/users', authenticateUser, async (c) => {
       .in('id', Array.from(confirmedIds));
     if (profileError) throw profileError;
 
-    return c.json({ users: profiles || [] });
+    const hydrated = await Promise.all((profiles || []).map((p: any) => hydrateProfileMedia(supabase, p)));
+    return c.json({ users: hydrated });
   } catch (error: any) {
     return c.json({ error: 'Failed to load users' }, 500);
   }

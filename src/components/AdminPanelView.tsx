@@ -234,15 +234,16 @@ export default function AdminPanelView({ lang, user }: AdminPanelViewProps) {
                   className="bg-slate-50 border border-slate-200/60 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400">
+                    <div className="w-10 h-10 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400 overflow-hidden">
                       {usr.photo ? (
                         <img
                           src={usr.photo}
                           className="w-full h-full object-cover rounded-full"
+                          referrerPolicy="no-referrer"
+                          onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
                         />
-                      ) : (
-                        <UserIcon className="w-5 h-5" />
-                      )}
+                      ) : null}
+                      {!usr.photo && <UserIcon className="w-5 h-5" />}
                     </div>
                     <div>
                       <h4 className="text-sm font-bold text-slate-900">
@@ -332,15 +333,16 @@ export default function AdminPanelView({ lang, user }: AdminPanelViewProps) {
                   className="bg-slate-50 border border-slate-200/60 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400">
+                    <div className="w-10 h-10 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400 overflow-hidden">
                       {usr.photo ? (
                         <img
                           src={usr.photo}
                           className="w-full h-full object-cover rounded-full"
+                          referrerPolicy="no-referrer"
+                          onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
                         />
-                      ) : (
-                        <UserIcon className="w-5 h-5" />
-                      )}
+                      ) : null}
+                      {!usr.photo && <UserIcon className="w-5 h-5" />}
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
@@ -433,16 +435,17 @@ export default function AdminPanelView({ lang, user }: AdminPanelViewProps) {
                 <X className="w-5 h-5" />
               </button>
 
-              <div className="w-20 h-20 mx-auto rounded-full overflow-hidden border border-slate-200 bg-slate-50 mb-4">
+              <div className="w-20 h-20 mx-auto rounded-full overflow-hidden border border-slate-200 bg-slate-50 mb-4 flex items-center justify-center">
                 {selectedUser.photo ? (
                   <img
                     src={selectedUser.photo}
                     alt={selectedUser.firstName}
                     className="w-full h-full object-cover"
+                    referrerPolicy="no-referrer"
+                    onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
                   />
-                ) : (
-                  <UserIcon className="w-full h-full p-5 text-slate-400 bg-slate-100" />
-                )}
+                ) : null}
+                {!selectedUser.photo && <UserIcon className="w-full h-full p-5 text-slate-400 bg-slate-100" />}
               </div>
 
               <h3 className="text-lg font-bold text-slate-900 mb-4">
