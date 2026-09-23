@@ -216,6 +216,23 @@ export default function LibraryView({ lang, user }: LibraryViewProps) {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [selectedItem]);
 
+  // One-step back like Groups: hardware back closes modal only, stays on same page
+  useEffect(() => {
+    if (!isAdding) return;
+    const onPop = () => { setIsAdding(false); setIsEditing(false); setEditingItem(null); resetForm(); };
+    window.history.pushState({ modal: 'libraryForm' }, '');
+    window.addEventListener('popstate', onPop, { once: true });
+    return () => { window.removeEventListener('popstate', onPop); if ((window.history.state as any)?.modal === 'libraryForm') window.history.back(); };
+  }, [isAdding]);
+
+  useEffect(() => {
+    if (!selectedItem) return;
+    const onPop = () => closeItemModal();
+    window.history.pushState({ modal: 'libraryDetails' }, '');
+    window.addEventListener('popstate', onPop, { once: true });
+    return () => { window.removeEventListener('popstate', onPop); if ((window.history.state as any)?.modal === 'libraryDetails') window.history.back(); };
+  }, [selectedItem]);
+
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (addType === 'video') {

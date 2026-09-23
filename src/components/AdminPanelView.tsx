@@ -168,15 +168,13 @@ export default function AdminPanelView({ lang, user }: AdminPanelViewProps) {
 
   if (!canManageUsers) {
     return (
-      <div className="py-12 text-center text-red-600 font-sans flex flex-col items-center gap-3">
-        <ShieldAlert className="w-12 h-12" />
-        <h3 className="text-lg font-bold">
-          {lang === "ar" ? "غير مصرح لك" : "Unauthorized Access"}
+      <div className="py-12 text-center text-slate-400 font-sans flex flex-col items-center gap-3">
+        <Shield className="w-10 h-10 text-slate-300" />
+        <h3 className="text-base font-bold text-slate-600">
+          {lang === "ar" ? "لوحة التحكم" : "Admin Panel"}
         </h3>
-        <p className="text-slate-500 text-sm">
-          {lang === "ar"
-            ? "لا تمتلك صلاحيات كافية لتصفح لوحة التحكم."
-            : "You do not have permissions to view this admin panel."}
+        <p className="text-slate-400 text-xs">
+          {lang === "ar" ? "هذه المساحة مخصصة للمسؤولين." : "This area is for administrators."}
         </p>
       </div>
     );

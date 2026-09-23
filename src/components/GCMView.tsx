@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Camera, Plus, Minus, FileText, Users, User as UserIcon, Trash2, Edit2, X, Info, HelpCircle, UserCheck } from 'lucide-react';
 import { Language, translations } from '../translations';
@@ -48,6 +48,57 @@ export default function GCMView({ lang, user, onUserUpdate }: GCMViewProps) {
   const [planText, setPlanText] = useState(user.personalPlan?.text || '');
   const [planPhoto, setPlanPhoto] = useState('');
   const [planPhotoPreview, setPlanPhotoPreview] = useState(user.personalPlan?.photo || '');
+
+  // One-step back like Groups: hardware back closes modal only, stays on same page (no home)
+  useEffect(() => {
+    if (!planFormOpen) return;
+    const onPop = () => setPlanFormOpen(false);
+    window.history.pushState({ modal: 'gcmPlan' }, '');
+    window.addEventListener('popstate', onPop, { once: true });
+    return () => { window.removeEventListener('popstate', onPop); if ((window.history.state as any)?.modal === 'gcmPlan') window.history.back(); };
+  }, [planFormOpen]);
+  useEffect(() => {
+    if (!disciplesOpen) return;
+    const onPop = () => setDisciplesOpen(false);
+    window.history.pushState({ modal: 'gcmDisciples' }, '');
+    window.addEventListener('popstate', onPop, { once: true });
+    return () => { window.removeEventListener('popstate', onPop); if ((window.history.state as any)?.modal === 'gcmDisciples') window.history.back(); };
+  }, [disciplesOpen]);
+  useEffect(() => {
+    if (!groupsOpen) return;
+    const onPop = () => setGroupsOpen(false);
+    window.history.pushState({ modal: 'gcmGroups' }, '');
+    window.addEventListener('popstate', onPop, { once: true });
+    return () => { window.removeEventListener('popstate', onPop); if ((window.history.state as any)?.modal === 'gcmGroups') window.history.back(); };
+  }, [groupsOpen]);
+  useEffect(() => {
+    if (!selectedDisciple) return;
+    const onPop = () => setSelectedDisciple(null);
+    window.history.pushState({ modal: 'gcmDiscipleDetails' }, '');
+    window.addEventListener('popstate', onPop, { once: true });
+    return () => { window.removeEventListener('popstate', onPop); if ((window.history.state as any)?.modal === 'gcmDiscipleDetails') window.history.back(); };
+  }, [selectedDisciple]);
+  useEffect(() => {
+    if (!selectedGroup) return;
+    const onPop = () => setSelectedGroup(null);
+    window.history.pushState({ modal: 'gcmGroupDetails' }, '');
+    window.addEventListener('popstate', onPop, { once: true });
+    return () => { window.removeEventListener('popstate', onPop); if ((window.history.state as any)?.modal === 'gcmGroupDetails') window.history.back(); };
+  }, [selectedGroup]);
+  useEffect(() => {
+    if (!discipleFormOpen) return;
+    const onPop = () => setDiscipleFormOpen(false);
+    window.history.pushState({ modal: 'gcmDiscipleForm' }, '');
+    window.addEventListener('popstate', onPop, { once: true });
+    return () => { window.removeEventListener('popstate', onPop); if ((window.history.state as any)?.modal === 'gcmDiscipleForm') window.history.back(); };
+  }, [discipleFormOpen]);
+  useEffect(() => {
+    if (!groupFormOpen) return;
+    const onPop = () => setGroupFormOpen(false);
+    window.history.pushState({ modal: 'gcmGroupForm' }, '');
+    window.addEventListener('popstate', onPop, { once: true });
+    return () => { window.removeEventListener('popstate', onPop); if ((window.history.state as any)?.modal === 'gcmGroupForm') window.history.back(); };
+  }, [groupFormOpen]);
 
   // 1. Profile photo upload handler
   const handleProfilePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
