@@ -22,6 +22,8 @@ const RATE_LIMITS = {
   admin: { limit: 60, windowSeconds: 60 },
   mediaRegister: { limit: 10, windowSeconds: 3600 },
   profileMedia: { limit: 30, windowSeconds: 3600 },
+  leaderMedia: { limit: 30, windowSeconds: 3600 },
+  leaders: { limit: 30, windowSeconds: 60 },
 };
 
 function decodeVerifiedJwtPayload(token: string): Record<string, any> | null {
@@ -228,6 +230,30 @@ app.use('/api/profile-media/*', async (c, next) => {
   const supabase = createSupabaseClient(c.env);
   const limited = await enforceRateLimit(supabase, c, 'profile-media', RATE_LIMITS.profileMedia.limit, RATE_LIMITS.profileMedia.windowSeconds);
   if (limited) return limited;
+  await next();
+});
+
+app.use('/api/leader-media/*', async (c, next) => {
+  const supabase = createSupabaseClient(c.env);
+  const limited = await enforceRateLimit(supabase, c, 'leader-media', RATE_LIMITS.leaderMedia.limit, RATE_LIMITS.leaderMedia.windowSeconds);
+  if (limited) return limited;
+  await next();
+});
+
+app.use('/api/leaders', async (c, next) => {
+  if (c.req.method === 'POST') {
+    const supabase = createSupabaseClient(c.env);
+    const limited = await enforceRateLimit(supabase, c, 'leaders', RATE_LIMITS.leaders.limit, RATE_LIMITS.leaders.windowSeconds);
+    if (limited) return limited;
+  }
+  await next();
+});
+app.use('/api/leaders/*', async (c, next) => {
+  if (c.req.method === 'PUT' || c.req.method === 'DELETE') {
+    const supabase = createSupabaseClient(c.env);
+    const limited = await enforceRateLimit(supabase, c, 'leaders', RATE_LIMITS.leaders.limit, RATE_LIMITS.leaders.windowSeconds);
+    if (limited) return limited;
+  }
   await next();
 });
 
@@ -528,12 +554,14 @@ app.get('/api/home', authenticateUser, async (c) => {
   try {
     const supabase = createSupabaseClient(c.env);
     const appData = await getAppData(supabase);
+    const rawLeaders = appData.leaders || [];
+    const leaders = await hydrateLeaders(supabase, rawLeaders);
     return c.json({
       homeConfig: appData.homeConfig || {
         welcomeMessageAr: 'مرحباً بكم في موقع GCM', welcomeMessageEn: 'Welcome to the GCM Portal',
         planPhoto: '', planTextAr: '', planTextEn: '',
       },
-      leaders: appData.leaders || [],
+      leaders,
       groups: appData.groups || [],
     });
   } catch {
@@ -580,7 +608,9 @@ app.get('/api/leaders', authenticateUser, async (c) => {
   try {
     const supabase = createSupabaseClient(c.env);
     const appData = await getAppData(supabase);
-    return c.json(appData.leaders || []);
+    const rawLeaders = appData.leaders || [];
+    const leaders = await hydrateLeaders(supabase, rawLeaders);
+    return c.json(leaders);
   } catch {
     return c.json([]);
   }
@@ -593,18 +623,32 @@ app.post('/api/leaders', authenticateUser, async (c) => {
       return c.json({ error: 'Forbidden - Insufficient permissions' }, 403);
     }
     const supabase = createSupabaseClient(c.env);
-    const { name, description, photo, groupId } = await readJson(c);
-    if (!name) return c.json({ error: 'Leader name is required' }, 400);
+    const { name, description, photo, groupId, photoPosition } = await readJson(c);
+    const trimmedName = typeof name === 'string' ? name.trim() : '';
+    if (!validLeaderText(trimmedName, 100, true)) return c.json({ error: 'Leader name is required (2-100 chars)', code: 'invalid_name' }, 400);
+    if (description !== undefined && !validLeaderText(description, 5000)) return c.json({ error: 'Description is too long (max 5000)', code: 'invalid_description' }, 400);
+    if (photo !== undefined && !isValidLeaderPhoto(photo, true)) return c.json({ error: 'Invalid photo', code: 'invalid_photo' }, 400);
+    if (photoPosition !== undefined && !validLeaderPhotoPosition(photoPosition)) return c.json({ error: 'Invalid photo position', code: 'invalid_photo_position' }, 400);
+    if (groupId && typeof groupId === 'string' && groupId !== '') {
+      if (groupId.length > 100) return c.json({ error: 'Invalid group', code: 'invalid_group' }, 400);
+    }
 
     const appData = await getAppData(supabase);
     const leaders = appData.leaders || [];
-    if (leaders.some((l: any) => l.name.toLowerCase() === name.toLowerCase())) {
-      return c.json({ error: 'Leader with this name already exists' }, 400);
+    const groups = appData.groups || [];
+    if (groupId && groupId !== '' && !groups.some((g: any) => g.id === groupId)) {
+      return c.json({ error: 'Selected group does not exist', code: 'invalid_group' }, 400);
     }
-    const newLeader = { id: `leader-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`, name, description: description || '', photo: photo || '', groupId: groupId || '' };
+    if (leaders.some((l: any) => l.name.trim().toLowerCase() === trimmedName.toLowerCase())) {
+      return c.json({ error: 'Leader with this name already exists', code: 'duplicate_name' }, 400);
+    }
+    const newLeader = { id: `leader-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`, name: trimmedName, description: typeof description === 'string' ? description.trim() : '', photo: typeof photo === 'string' ? photo : '', groupId: typeof groupId === 'string' ? groupId : '', photoPosition: validLeaderPhotoPosition(photoPosition) ? photoPosition : 'center' };
     await saveAppData(supabase, { ...appData, leaders: [...leaders, newLeader] });
-    return c.json(newLeader, 201);
-  } catch {
+    await writeAuditLog(supabase, c, user.id, 'create_leader', 'leader', newLeader.id, { name: trimmedName });
+    // hydrate before returning so client sees signed URL if needed
+    const hydrated = { ...newLeader, photo: await signLeaderMediaValue(supabase, newLeader.photo) };
+    return c.json(hydrated, 201);
+  } catch (err: any) {
     return c.json({ error: 'Failed to add leader' }, 500);
   }
 });
@@ -617,14 +661,29 @@ app.put('/api/leaders/:id', authenticateUser, async (c) => {
     }
     const supabase = createSupabaseClient(c.env);
     const { id } = c.req.param();
-    const { name, description, photo, groupId } = await readJson(c);
+    if (typeof id !== 'string' || id.length > 100) return c.json({ error: 'Invalid leader ID', code: 'invalid_id' }, 400);
+    const { name, description, photo, groupId, photoPosition } = await readJson(c);
+    if (name !== undefined && !validLeaderText(String(name).trim(), 100, true)) return c.json({ error: 'Invalid name (2-100 chars)', code: 'invalid_name' }, 400);
+    if (description !== undefined && !validLeaderText(description, 5000)) return c.json({ error: 'Description is too long', code: 'invalid_description' }, 400);
+    if (photo !== undefined && !isValidLeaderPhoto(photo, true)) return c.json({ error: 'Invalid photo', code: 'invalid_photo' }, 400);
+    if (photoPosition !== undefined && !validLeaderPhotoPosition(photoPosition)) return c.json({ error: 'Invalid photo position', code: 'invalid_photo_position' }, 400);
+    if (groupId !== undefined && typeof groupId === 'string' && groupId !== '' && groupId.length > 100) return c.json({ error: 'Invalid group', code: 'invalid_group' }, 400);
     const appData = await getAppData(supabase);
     const leaders = appData.leaders || [];
+    const groups = appData.groups || [];
     const idx = leaders.findIndex((l: any) => l.id === id);
-    if (idx === -1) return c.json({ error: 'Leader not found' }, 404);
-    leaders[idx] = { ...leaders[idx], name: name || leaders[idx].name, description: description !== undefined ? description : leaders[idx].description, photo: photo !== undefined ? photo : leaders[idx].photo, groupId: groupId !== undefined ? groupId : leaders[idx].groupId };
+    if (idx === -1) return c.json({ error: 'Leader not found', code: 'not_found' }, 404);
+    if (groupId && groupId !== '' && !groups.some((g: any) => g.id === groupId)) {
+      return c.json({ error: 'Selected group does not exist', code: 'invalid_group' }, 400);
+    }
+    if (name && leaders.some((l: any, i: number) => i !== idx && l.name.trim().toLowerCase() === String(name).trim().toLowerCase())) {
+      return c.json({ error: 'Another leader with this name already exists', code: 'duplicate_name' }, 400);
+    }
+    leaders[idx] = { ...leaders[idx], name: name !== undefined ? String(name).trim() : leaders[idx].name, description: description !== undefined ? String(description).trim() : leaders[idx].description, photo: photo !== undefined ? photo : leaders[idx].photo, groupId: groupId !== undefined ? groupId : leaders[idx].groupId, photoPosition: photoPosition !== undefined ? photoPosition : (leaders[idx].photoPosition || 'center') };
     await saveAppData(supabase, { ...appData, leaders });
-    return c.json(leaders[idx]);
+    await writeAuditLog(supabase, c, user.id, 'update_leader', 'leader', id, { fields: Object.keys({ name, description, photo, groupId, photoPosition }).filter(k => ( { name, description, photo, groupId, photoPosition } as any)[k] !== undefined) });
+    const hydrated = { ...leaders[idx], photo: await signLeaderMediaValue(supabase, leaders[idx].photo) };
+    return c.json(hydrated);
   } catch {
     return c.json({ error: 'Failed to update leader' }, 500);
   }
@@ -638,8 +697,15 @@ app.delete('/api/leaders/:id', authenticateUser, async (c) => {
     }
     const supabase = createSupabaseClient(c.env);
     const { id } = c.req.param();
+    if (typeof id !== 'string' || id.length > 100) return c.json({ error: 'Invalid leader ID', code: 'invalid_id' }, 400);
     const appData = await getAppData(supabase);
-    await saveAppData(supabase, { ...appData, leaders: (appData.leaders || []).filter((l: any) => l.id !== id) });
+    const leaders = appData.leaders || [];
+    const target = leaders.find((l: any) => l.id === id);
+    await saveAppData(supabase, { ...appData, leaders: leaders.filter((l: any) => l.id !== id) });
+    if (target?.photo && isSafeLeaderMediaPath(target.photo)) {
+      try { await supabase.storage.from('leader-media').remove([target.photo]); } catch {}
+    }
+    await writeAuditLog(supabase, c, user.id, 'delete_leader', 'leader', id);
     return c.json({ success: true });
   } catch {
     return c.json({ error: 'Failed to delete leader' }, 500);
@@ -869,6 +935,90 @@ function isSafeProfileMediaPath(value: unknown, userId: string, allowAdmin: bool
   if (!/^[a-f0-9-]{36}\.(jpg|png|webp)$/.test(parts[2])) return false;
   return allowAdmin || parts[0] === profile.id;
 }
+
+// Leader media security helpers (follow same pattern as profile-media, 5MB, jpeg/png/webp)
+const LEADER_MEDIA_MAX_BYTES = 5 * 1024 * 1024;
+const LEADER_MEDIA_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const LEADER_PHOTO_POSITIONS = new Set(['center', 'top', 'bottom', 'left', 'right', 'center top', 'center bottom', 'left top', 'right top', 'left center', 'right center', 'left bottom', 'right bottom', 'center 20%', 'center 30%']);
+
+function leaderMediaExtension(contentType: string): string {
+  return contentType === 'image/jpeg' ? 'jpg' : contentType === 'image/png' ? 'png' : 'webp';
+}
+
+function isSafeLeaderMediaPath(value: unknown): boolean {
+  if (typeof value !== 'string' || value.length > 300 || value.includes('..') || value.includes('\\') || value.startsWith('/')) return false;
+  const parts = value.split('/');
+  if (parts.length !== 2 || parts[0] !== 'leaders') return false;
+  if (!/^[a-f0-9-]{36}\.(jpg|png|webp)$/.test(parts[1])) return false;
+  return true;
+}
+
+function validLeaderText(value: unknown, maxLength: number, required = false): boolean {
+  return typeof value === 'string' && (required ? value.trim().length > 0 : true) && value.length <= maxLength && value.trim().length <= maxLength;
+}
+
+function validLeaderPhotoPosition(value: unknown): boolean {
+  if (value === undefined || value === null || value === '') return true;
+  return typeof value === 'string' && LEADER_PHOTO_POSITIONS.has(value);
+}
+
+function isValidLeaderPhoto(value: unknown, isLegacyBase64Allowed = true): boolean {
+  if (typeof value !== 'string') return false;
+  if (value === '') return true;
+  if (isSafeLeaderMediaPath(value)) return true;
+  if (isLegacyBase64Allowed && value.startsWith('data:image/')) {
+    // legacy base64 allowed for backward compat but size-limited
+    if (value.length > 7 * 1024 * 1024) return false;
+    return /^data:image\/(jpeg|png|webp);base64,/.test(value);
+  }
+  // allow already-signed https URL from previous hydration? reject raw https except Supabase signed
+  if (value.startsWith('https://')) return value.length <= 2048;
+  return false;
+}
+
+async function signLeaderMediaValue(supabase: any, value: unknown): Promise<string> {
+  if (typeof value !== 'string' || !isSafeLeaderMediaPath(value)) return typeof value === 'string' ? value : '';
+  const { data } = await supabase.storage.from('leader-media').createSignedUrl(value, 3600);
+  return data?.signedUrl || value;
+}
+
+async function hydrateLeaders(supabase: any, leaders: any[]): Promise<any[]> {
+  if (!Array.isArray(leaders) || leaders.length === 0) return leaders;
+  return Promise.all(leaders.map(async (l: any) => ({ ...l, photo: await signLeaderMediaValue(supabase, l.photo) })));
+}
+
+app.post('/api/leader-media/upload', authenticateUser, async (c) => {
+  try {
+    const user = c.get('user');
+    if (user.role !== 'super_admin' && !user.permissions?.includes('edit_home')) {
+      return c.json({ error: 'Forbidden - Insufficient permissions', code: 'forbidden' }, 403);
+    }
+    const body = await c.req.parseBody();
+    const file = body.file;
+    if (!(file instanceof File)) {
+      return c.json({ error: 'Invalid leader image upload', code: 'leader_media_invalid_upload' }, 400);
+    }
+    if (file.size <= 0 || file.size > LEADER_MEDIA_MAX_BYTES) {
+      return c.json({ error: 'Leader image is too large (max 5MB)', code: 'leader_media_too_large' }, 413);
+    }
+    const contentType = String(file.type || '').toLowerCase();
+    if (!LEADER_MEDIA_TYPES.has(contentType)) {
+      return c.json({ error: 'Unsupported image type (jpeg/png/webp only)', code: 'leader_media_invalid_type' }, 400);
+    }
+    const path = `leaders/${crypto.randomUUID()}.${leaderMediaExtension(contentType)}`;
+    const supabase = createSupabaseClient(c.env);
+    const { error } = await supabase.storage.from('leader-media').upload(path, await file.arrayBuffer(), {
+      contentType,
+      cacheControl: '3600',
+      upsert: false,
+    });
+    if (error) throw error;
+    await writeAuditLog(supabase, c, user.id, 'upload_leader_media', 'leader_media', path, { size_bytes: file.size, content_type: contentType });
+    return c.json({ path });
+  } catch (error: any) {
+    return c.json({ error: 'Failed to upload leader image', code: 'leader_media_upload_failed' }, 500);
+  }
+});
 
 app.post('/api/profile-media/upload', authenticateAnyUser, async (c) => {
   try {
