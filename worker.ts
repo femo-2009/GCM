@@ -623,12 +623,13 @@ app.post('/api/leaders', authenticateUser, async (c) => {
       return c.json({ error: 'Forbidden - Insufficient permissions' }, 403);
     }
     const supabase = createSupabaseClient(c.env);
-    const { name, description, photo, groupId, photoPosition } = await readJson(c);
+    const { name, description, photo, groupId, photoPosition, photoScale } = await readJson(c);
     const trimmedName = typeof name === 'string' ? name.trim() : '';
     if (!validLeaderText(trimmedName, 100, true)) return c.json({ error: 'Leader name is required (2-100 chars)', code: 'invalid_name' }, 400);
     if (description !== undefined && !validLeaderText(description, 5000)) return c.json({ error: 'Description is too long (max 5000)', code: 'invalid_description' }, 400);
     if (photo !== undefined && !isValidLeaderPhoto(photo, true)) return c.json({ error: 'Invalid photo', code: 'invalid_photo' }, 400);
     if (photoPosition !== undefined && !validLeaderPhotoPosition(photoPosition)) return c.json({ error: 'Invalid photo position', code: 'invalid_photo_position' }, 400);
+    if (photoScale !== undefined && !validLeaderPhotoScale(photoScale)) return c.json({ error: 'Invalid photo scale (1-3)', code: 'invalid_photo_scale' }, 400);
     if (groupId && typeof groupId === 'string' && groupId !== '') {
       if (groupId.length > 100) return c.json({ error: 'Invalid group', code: 'invalid_group' }, 400);
     }
@@ -642,7 +643,8 @@ app.post('/api/leaders', authenticateUser, async (c) => {
     if (leaders.some((l: any) => l.name.trim().toLowerCase() === trimmedName.toLowerCase())) {
       return c.json({ error: 'Leader with this name already exists', code: 'duplicate_name' }, 400);
     }
-    const newLeader = { id: `leader-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`, name: trimmedName, description: typeof description === 'string' ? description.trim() : '', photo: typeof photo === 'string' ? photo : '', groupId: typeof groupId === 'string' ? groupId : '', photoPosition: validLeaderPhotoPosition(photoPosition) ? photoPosition : 'center' };
+    const safeScale = photoScale !== undefined && validLeaderPhotoScale(photoScale) ? Number(photoScale) : 1;
+    const newLeader = { id: `leader-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`, name: trimmedName, description: typeof description === 'string' ? description.trim() : '', photo: typeof photo === 'string' ? photo : '', groupId: typeof groupId === 'string' ? groupId : '', photoPosition: validLeaderPhotoPosition(photoPosition) ? photoPosition : '50% 50%', photoScale: safeScale };
     await saveAppData(supabase, { ...appData, leaders: [...leaders, newLeader] });
     await writeAuditLog(supabase, c, user.id, 'create_leader', 'leader', newLeader.id, { name: trimmedName });
     // hydrate before returning so client sees signed URL if needed
@@ -662,11 +664,12 @@ app.put('/api/leaders/:id', authenticateUser, async (c) => {
     const supabase = createSupabaseClient(c.env);
     const { id } = c.req.param();
     if (typeof id !== 'string' || id.length > 100) return c.json({ error: 'Invalid leader ID', code: 'invalid_id' }, 400);
-    const { name, description, photo, groupId, photoPosition } = await readJson(c);
+    const { name, description, photo, groupId, photoPosition, photoScale } = await readJson(c);
     if (name !== undefined && !validLeaderText(String(name).trim(), 100, true)) return c.json({ error: 'Invalid name (2-100 chars)', code: 'invalid_name' }, 400);
     if (description !== undefined && !validLeaderText(description, 5000)) return c.json({ error: 'Description is too long', code: 'invalid_description' }, 400);
     if (photo !== undefined && !isValidLeaderPhoto(photo, true)) return c.json({ error: 'Invalid photo', code: 'invalid_photo' }, 400);
     if (photoPosition !== undefined && !validLeaderPhotoPosition(photoPosition)) return c.json({ error: 'Invalid photo position', code: 'invalid_photo_position' }, 400);
+    if (photoScale !== undefined && !validLeaderPhotoScale(photoScale)) return c.json({ error: 'Invalid photo scale', code: 'invalid_photo_scale' }, 400);
     if (groupId !== undefined && typeof groupId === 'string' && groupId !== '' && groupId.length > 100) return c.json({ error: 'Invalid group', code: 'invalid_group' }, 400);
     const appData = await getAppData(supabase);
     const leaders = appData.leaders || [];
@@ -679,9 +682,9 @@ app.put('/api/leaders/:id', authenticateUser, async (c) => {
     if (name && leaders.some((l: any, i: number) => i !== idx && l.name.trim().toLowerCase() === String(name).trim().toLowerCase())) {
       return c.json({ error: 'Another leader with this name already exists', code: 'duplicate_name' }, 400);
     }
-    leaders[idx] = { ...leaders[idx], name: name !== undefined ? String(name).trim() : leaders[idx].name, description: description !== undefined ? String(description).trim() : leaders[idx].description, photo: photo !== undefined ? photo : leaders[idx].photo, groupId: groupId !== undefined ? groupId : leaders[idx].groupId, photoPosition: photoPosition !== undefined ? photoPosition : (leaders[idx].photoPosition || 'center') };
+    leaders[idx] = { ...leaders[idx], name: name !== undefined ? String(name).trim() : leaders[idx].name, description: description !== undefined ? String(description).trim() : leaders[idx].description, photo: photo !== undefined ? photo : leaders[idx].photo, groupId: groupId !== undefined ? groupId : leaders[idx].groupId, photoPosition: photoPosition !== undefined ? photoPosition : (leaders[idx].photoPosition || '50% 50%'), photoScale: photoScale !== undefined ? Number(photoScale) : (leaders[idx].photoScale || 1) };
     await saveAppData(supabase, { ...appData, leaders });
-    await writeAuditLog(supabase, c, user.id, 'update_leader', 'leader', id, { fields: Object.keys({ name, description, photo, groupId, photoPosition }).filter(k => ( { name, description, photo, groupId, photoPosition } as any)[k] !== undefined) });
+    await writeAuditLog(supabase, c, user.id, 'update_leader', 'leader', id, { fields: Object.keys({ name, description, photo, groupId, photoPosition, photoScale }).filter(k => ( { name, description, photo, groupId, photoPosition, photoScale } as any)[k] !== undefined) });
     const hydrated = { ...leaders[idx], photo: await signLeaderMediaValue(supabase, leaders[idx].photo) };
     return c.json(hydrated);
   } catch {
@@ -959,7 +962,21 @@ function validLeaderText(value: unknown, maxLength: number, required = false): b
 
 function validLeaderPhotoPosition(value: unknown): boolean {
   if (value === undefined || value === null || value === '') return true;
-  return typeof value === 'string' && LEADER_PHOTO_POSITIONS.has(value);
+  if (typeof value !== 'string' || value.length > 50) return false;
+  if (LEADER_PHOTO_POSITIONS.has(value)) return true;
+  // WhatsApp-style: "25% 75%" or "50% 50%" - allow any valid CSS object-position with percentages
+  if (/^\d{1,3}% \d{1,3}%$/.test(value)) {
+    const [x, y] = value.split(' ').map(v => parseInt(v));
+    return x >= 0 && x <= 100 && y >= 0 && y <= 100;
+  }
+  // allow "center", "top", etc already in set, but also allow keyword combos like "left 20%"
+  return false;
+}
+
+function validLeaderPhotoScale(value: unknown): boolean {
+  if (value === undefined || value === null || value === '') return true;
+  const n = typeof value === 'string' ? parseFloat(value) : typeof value === 'number' ? value : NaN;
+  return Number.isFinite(n) && n >= 1 && n <= 3;
 }
 
 function isValidLeaderPhoto(value: unknown, isLegacyBase64Allowed = true): boolean {
