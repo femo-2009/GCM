@@ -45,8 +45,22 @@ export default function HomeView({ lang, user, groups, setGroups, onNavigate }: 
   const [leaderGroupId, setLeaderGroupId] = useState('');
   const [leaderPhoto, setLeaderPhoto] = useState('');
   const [leaderPhotoPreview, setLeaderPhotoPreview] = useState('');
+  const [leaderPhotoPosition, setLeaderPhotoPosition] = useState('center');
   const [isSavingLeader, setIsSavingLeader] = useState(false);
+  const [isUploadingLeaderPhoto, setIsUploadingLeaderPhoto] = useState(false);
   const leaderFormRef = useRef<HTMLFormElement>(null);
+
+  const LEADER_POSITIONS = [
+    { value: 'left top', labelAr: 'أعلى يسار', labelEn: 'Top Left' },
+    { value: 'center top', labelAr: 'أعلى وسط', labelEn: 'Top Center' },
+    { value: 'right top', labelAr: 'أعلى يمين', labelEn: 'Top Right' },
+    { value: 'left center', labelAr: 'وسط يسار', labelEn: 'Center Left' },
+    { value: 'center', labelAr: 'وسط', labelEn: 'Center' },
+    { value: 'right center', labelAr: 'وسط يمين', labelEn: 'Center Right' },
+    { value: 'left bottom', labelAr: 'أسفل يسار', labelEn: 'Bottom Left' },
+    { value: 'center bottom', labelAr: 'أسفل وسط', labelEn: 'Bottom Center' },
+    { value: 'right bottom', labelAr: 'أسفل يمين', labelEn: 'Bottom Right' },
+  ];
 
   // Detailed Leader View Modal
   const [selectedLeader, setSelectedLeader] = useState<Leader | null>(null);
@@ -165,6 +179,48 @@ export default function HomeView({ lang, user, groups, setGroups, onNavigate }: 
     }
   };
 
+  // Secure leader photo upload (follows site security: 5MB, jpeg/png/webp, private bucket)
+  const handleLeaderPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      alert(lang === 'ar' ? 'نوع الصورة غير مدعوم (jpeg/png/webp فقط)' : 'Unsupported image type (jpeg/png/webp only)');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      alert(lang === 'ar' ? 'الصورة كبيرة جداً (الحد 5MB)' : 'Image too large (max 5MB)');
+      return;
+    }
+    setIsUploadingLeaderPhoto(true);
+    try {
+      // instant local preview (like slider will show) while uploading securely
+      const localPreview = URL.createObjectURL(file);
+      setLeaderPhotoPreview(localPreview);
+      const { data: { session } } = await supabase.auth.getSession();
+      const formData = new FormData();
+      formData.append('file', file, file.name);
+      const res = await fetch('/api/leader-media/upload', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session?.access_token || ''}` },
+        body: formData,
+      });
+      const payload: any = await res.json().catch(() => null);
+      if (!res.ok || typeof payload?.path !== 'string') {
+        throw new Error(payload?.error || (lang === 'ar' ? 'فشل رفع الصورة' : 'Failed to upload image'));
+      }
+      setLeaderPhoto(payload.path);
+      // keep preview as object URL until next fetchData hydrates signed URL; also store path for submission
+    } catch (err: any) {
+      console.error(err);
+      alert(err.message || (lang === 'ar' ? 'فشل رفع الصورة' : 'Failed to upload image'));
+      // keep previous photo if exists
+    } finally {
+      setIsUploadingLeaderPhoto(false);
+      // reset file input value to allow re-select same file
+      e.target.value = '';
+    }
+  };
+
   // General Plan update
   const handleSavePlan = async () => {
     await withLoading(async () => {
@@ -235,6 +291,21 @@ export default function HomeView({ lang, user, groups, setGroups, onNavigate }: 
         const method = isEdit ? 'PUT' : 'POST';
 
 
+        // Security: trim inputs, enforce limits client-side
+        const trimmedName = leaderName.trim();
+        if (trimmedName.length < 2 || trimmedName.length > 100) {
+          throw new Error(lang === 'ar' ? 'اسم القائد يجب أن يكون بين 2 و 100 حرف' : 'Leader name must be 2-100 characters');
+        }
+        if (leaderDesc.length > 5000) {
+          throw new Error(lang === 'ar' ? 'الوصف طويل جداً' : 'Description too long');
+        }
+        // If user picked a new photo but upload not finished, block
+        if (isUploadingLeaderPhoto) {
+          throw new Error(lang === 'ar' ? 'انتظر حتى يكتمل رفع الصورة' : 'Please wait for image upload to finish');
+        }
+        // Determine photo to send: if new upload path exists use it, otherwise keep existing leader's photo when editing
+        const photoToSend = leaderPhoto || (editingLeader?.photo && !leaderPhotoPreview.startsWith('blob:') ? editingLeader.photo : '');
+
         const res = await fetch(endpoint, {
           method,
           headers: { 
@@ -242,10 +313,11 @@ export default function HomeView({ lang, user, groups, setGroups, onNavigate }: 
             'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`
           },
           body: JSON.stringify({
-            name: leaderName,
-            description: leaderDesc,
-            photo: leaderPhoto,
-            groupId: leaderGroupId
+            name: trimmedName,
+            description: leaderDesc.trim(),
+            photo: photoToSend,
+            groupId: leaderGroupId,
+            photoPosition: leaderPhotoPosition || 'center'
           }),
         });
 
@@ -261,7 +333,7 @@ export default function HomeView({ lang, user, groups, setGroups, onNavigate }: 
           throw new Error(errorMessage);
         }
 
-        // Refresh
+        // Refresh (will hydrate signed URLs)
         await fetchData();
         // Reset states
         setIsAddingLeader(false);
@@ -271,6 +343,7 @@ export default function HomeView({ lang, user, groups, setGroups, onNavigate }: 
         setLeaderGroupId('');
         setLeaderPhoto('');
         setLeaderPhotoPreview('');
+        setLeaderPhotoPosition('center');
         alert(lang === 'ar' ? 'تم حفظ القائد بنجاح' : 'Leader saved successfully');
       } catch (err: any) {
         console.error(err);
@@ -320,6 +393,7 @@ export default function HomeView({ lang, user, groups, setGroups, onNavigate }: 
     setLeaderGroupId(leader.groupId);
     setLeaderPhotoPreview(leader.photo);
     setLeaderPhoto('');
+    setLeaderPhotoPosition(leader.photoPosition || 'center');
     setIsAddingLeader(true);
   };
 
@@ -430,6 +504,7 @@ export default function HomeView({ lang, user, groups, setGroups, onNavigate }: 
                         alt={leader.name}
                         referrerPolicy="no-referrer"
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        style={{ objectPosition: (leader as any).photoPosition || 'center' }}
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 via-transparent to-transparent opacity-85" />
                       
@@ -737,6 +812,7 @@ export default function HomeView({ lang, user, groups, setGroups, onNavigate }: 
                     setLeaderGroupId('');
                     setLeaderPhoto('');
                     setLeaderPhotoPreview('');
+                    setLeaderPhotoPosition('center');
                   }}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 shadow-md transition-colors cursor-pointer"
                 >
@@ -796,36 +872,68 @@ export default function HomeView({ lang, user, groups, setGroups, onNavigate }: 
                     />
                   </div>
 
-                  {/* Leader Photo */}
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">{t.uploadPhoto}</label>
-                    <div className="flex items-center gap-4">
-                      {leaderPhotoPreview ? (
-                        <img src={leaderPhotoPreview} alt="Leader Preview" className="w-12 h-12 rounded-xl object-cover border border-slate-200" />
-                      ) : (
-                        <div className="w-12 h-12 bg-white border border-slate-200 border-dashed rounded-xl flex items-center justify-center text-slate-400">
-                          <HelpCircle className="w-5 h-5" />
+                  {/* Leader Photo - secure upload + slider preview */}
+                  <div className="space-y-3 bg-white border border-slate-200 rounded-2xl p-4">
+                    <label className="block text-xs font-bold text-slate-700">{lang === 'ar' ? 'صورة القائد ومعاينة السلايدر' : 'Leader Photo & Slider Preview'} <span className="font-normal text-[10px] text-slate-400">({lang === 'ar' ? 'آمن: jpeg/png/webp حتى 5MB' : 'secure: jpeg/png/webp max 5MB'})</span></label>
+                    <div className="grid md:grid-cols-2 gap-4 items-start">
+                      {/* Live slider preview - exactly like real slider */}
+                      <div className="space-y-2">
+                        <span className="text-[11px] font-semibold text-slate-500">{lang === 'ar' ? 'معاينة كما ستظهر في السلايدر' : 'Preview as on slider'}</span>
+                        <div className="w-full max-w-[260px] bg-slate-50 border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+                          <div className="relative h-44 overflow-hidden bg-slate-100">
+                            {leaderPhotoPreview ? (
+                              <img src={leaderPhotoPreview} alt="Preview" className="w-full h-full object-cover" style={{ objectPosition: leaderPhotoPosition }} />
+                            ) : (
+                              <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 gap-1">
+                                <HelpCircle className="w-6 h-6" />
+                                <span className="text-[10px]">{lang === 'ar' ? 'لا توجد صورة' : 'No image'}</span>
+                              </div>
+                            )}
+                            <div className="absolute inset-0 bg-gradient-to-t from-slate-900/40 to-transparent pointer-events-none" />
+                          </div>
+                          <div className="p-3">
+                            <div className="h-3 w-2/3 bg-slate-200 rounded mb-2" />
+                            <div className="h-2 w-full bg-slate-100 rounded" />
+                          </div>
                         </div>
-                      )}
-                      <label className="px-3 py-1.5 bg-white hover:bg-slate-100 border border-slate-200 text-[11px] font-semibold text-slate-700 rounded-xl transition-colors cursor-pointer">
-                        <span>{lang === 'ar' ? 'اختيار ملف' : 'Choose File'}</span>
-                        <input 
-                          type="file" 
-                          accept="image/*" 
-                          className="hidden" 
-                          onChange={(e) => handlePhotoUpload(e, setLeaderPhoto, setLeaderPhotoPreview)} 
-                        />
-                      </label>
+                      </div>
+                      {/* Upload + position picker */}
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-3">
+                          <label className={`px-3 py-2 rounded-xl text-[11px] font-bold border transition-colors cursor-pointer ${isUploadingLeaderPhoto ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-700 border-indigo-600'}`}>
+                            <span>{isUploadingLeaderPhoto ? (lang === 'ar' ? 'جاري الرفع...' : 'Uploading...') : (lang === 'ar' ? 'اختيار صورة' : 'Choose Image')}</span>
+                            <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" disabled={isUploadingLeaderPhoto} onChange={handleLeaderPhotoUpload} />
+                          </label>
+                          {leaderPhotoPreview && <span className="text-[10px] text-emerald-600 font-semibold">{lang === 'ar' ? 'تم اختيار الصورة' : 'Image selected'}</span>}
+                        </div>
+                        <div>
+                          <span className="block text-[11px] font-semibold text-slate-600 mb-1.5">{lang === 'ar' ? 'اختر موضع القص في السلايدر' : 'Choose crop position'}</span>
+                          <div className="grid grid-cols-3 gap-1.5 w-fit bg-slate-50 border border-slate-200 rounded-xl p-2">
+                            {LEADER_POSITIONS.map((pos) => (
+                              <button
+                                key={pos.value}
+                                type="button"
+                                onClick={() => setLeaderPhotoPosition(pos.value)}
+                                title={lang === 'ar' ? pos.labelAr : pos.labelEn}
+                                className={`w-9 h-9 rounded-lg border text-[8px] font-bold leading-none transition-all flex items-center justify-center ${leaderPhotoPosition === pos.value ? 'bg-indigo-600 text-white border-indigo-600 shadow-md scale-105' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'}`}
+                              >
+                                {lang === 'ar' ? pos.labelAr : pos.labelEn.split(' ').map(w=>w[0]).join('')}
+                              </button>
+                            ))}
+                          </div>
+                          <span className="block text-[10px] text-slate-400 mt-1">{lang === 'ar' ? 'اضغط لترى القص مباشرة في المعاينة' : 'Tap to see crop live in preview'} • <code className="bg-slate-100 px-1 rounded">{leaderPhotoPosition}</code></span>
+                        </div>
+                      </div>
                     </div>
                   </div>
 
                   <div className="flex gap-2 justify-end pt-2">
                     <button
                       type="submit"
-                      disabled={isSavingLeader}
+                      disabled={isSavingLeader || isUploadingLeaderPhoto}
                       className="px-4 py-2 bg-indigo-600 text-white font-bold rounded-xl text-xs hover:bg-indigo-700 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {isSavingLeader ? (lang === 'ar' ? 'جاري الحفظ...' : 'Saving...') : t.save}
+                      {isUploadingLeaderPhoto ? (lang === 'ar' ? 'جاري رفع الصورة...' : 'Uploading image...') : isSavingLeader ? (lang === 'ar' ? 'جاري الحفظ...' : 'Saving...') : t.save}
                     </button>
                     <button
                       type="button"
@@ -851,6 +959,7 @@ export default function HomeView({ lang, user, groups, setGroups, onNavigate }: 
                         src={leader.photo} 
                         alt={leader.name} 
                         className="w-11 h-11 rounded-xl object-cover bg-white border border-slate-200" 
+                        style={{ objectPosition: (leader as any).photoPosition || 'center' }}
                       />
                       <div className="flex-1 min-w-0">
                         <h4 className="text-xs md:text-sm font-bold text-slate-800 truncate">{leader.name}</h4>
@@ -909,7 +1018,7 @@ export default function HomeView({ lang, user, groups, setGroups, onNavigate }: 
 
               <div className="space-y-4 text-center">
                 <div className="w-28 h-28 mx-auto rounded-full overflow-hidden border-2 border-indigo-600 shadow-xl bg-slate-100">
-                  <img src={selectedLeader.photo} alt={selectedLeader.name} className="w-full h-full object-cover" />
+                  <img src={selectedLeader.photo} alt={selectedLeader.name} className="w-full h-full object-cover" style={{ objectPosition: (selectedLeader as any).photoPosition || 'center' }} />
                 </div>
 
                 <div className="pt-2">
