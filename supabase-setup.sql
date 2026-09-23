@@ -544,6 +544,34 @@ DO UPDATE SET
     'image/webp'
   ]::text[];
 
+INSERT INTO storage.buckets (
+  id,
+  name,
+  public,
+  file_size_limit,
+  allowed_mime_types
+)
+VALUES (
+  'leader-media',
+  'leader-media',
+  false,
+  5242880,
+  ARRAY[
+    'image/jpeg',
+    'image/png',
+    'image/webp'
+  ]::text[]
+)
+ON CONFLICT (id)
+DO UPDATE SET
+  public = false,
+  file_size_limit = 5242880,
+  allowed_mime_types = ARRAY[
+    'image/jpeg',
+    'image/png',
+    'image/webp'
+  ]::text[];
+
 -- ============================================================
 -- 16. STORAGE POLICIES
 -- ============================================================
@@ -610,6 +638,52 @@ TO authenticated
 USING (
   bucket_id = 'media'
   AND public.can_edit_library()
+);
+
+-- Leader-media policies: only approved users can read, only home editors (super_admin/edit_home + aal2) can write via service_role worker (storage RLS via is_approved_admin)
+DROP POLICY IF EXISTS "leader_media_select_approved_users" ON storage.objects;
+DROP POLICY IF EXISTS "leader_media_insert_home_editors" ON storage.objects;
+DROP POLICY IF EXISTS "leader_media_update_home_editors" ON storage.objects;
+DROP POLICY IF EXISTS "leader_media_delete_home_editors" ON storage.objects;
+
+CREATE POLICY "leader_media_select_approved_users"
+ON storage.objects
+FOR SELECT
+TO authenticated
+USING (
+  bucket_id = 'leader-media'
+  AND public.is_approved_user()
+);
+
+CREATE POLICY "leader_media_insert_home_editors"
+ON storage.objects
+FOR INSERT
+TO authenticated
+WITH CHECK (
+  bucket_id = 'leader-media'
+  AND public.is_approved_admin()
+);
+
+CREATE POLICY "leader_media_update_home_editors"
+ON storage.objects
+FOR UPDATE
+TO authenticated
+USING (
+  bucket_id = 'leader-media'
+  AND public.is_approved_admin()
+)
+WITH CHECK (
+  bucket_id = 'leader-media'
+  AND public.is_approved_admin()
+);
+
+CREATE POLICY "leader_media_delete_home_editors"
+ON storage.objects
+FOR DELETE
+TO authenticated
+USING (
+  bucket_id = 'leader-media'
+  AND public.is_approved_admin()
 );
 
 -- Do not remove SELECT, INSERT, UPDATE, or DELETE
