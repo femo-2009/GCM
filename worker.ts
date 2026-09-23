@@ -1179,8 +1179,8 @@ async function fetchRealChurchesFromOverpass(governorate: string): Promise<Array
   const bbox = GOV_BBOX[governorate];
   if (!bbox) return [];
   const [ south, west, north, east ] = bbox;
-  // All real churches like Google Maps - no 100 limit, fetch all
-  const query = `[out:json][timeout:60];(nwr["amenity"="place_of_worship"](${south},${west},${north},${east});nwr["building"="church"](${south},${west},${north},${east});nwr["name"~"كنيسة|كنيسه|Church|church|ⲉⲕⲕⲗⲏⲥⲓⲁ"](${south},${west},${north},${east}););out center;`;
+  // ONLY churches - all Christian sects (Orthodox, Catholic, Evangelical, etc.) - religion=christian covers all, building=church as fallback, never mosques/charities
+  const query = `[out:json][timeout:60];(nwr["amenity"="place_of_worship"]["religion"="christian"](${south},${west},${north},${east});nwr["building"="church"](${south},${west},${north},${east});nwr["amenity"="place_of_worship"]["denomination"](${south},${west},${north},${east}););out center;`;
   const endpoints = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
   for (const endpoint of endpoints) {
     try {
