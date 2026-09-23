@@ -821,7 +821,7 @@ export default function GroupsView({ lang, user, groups, setGroups, onNavigate }
                   </div>
                 ) : (
                   // @ts-ignore - react-leaflet types
-                  <MapContainer center={mapChurches.length ? [mapChurches[0].lat, mapChurches[0].lng] as any : [30.05, 31.23] as any} zoom={11} style={{ height: '100%', width: '100%' } as any} scrollWheelZoom={true as any}>
+                  <MapContainer key={`${mapGroup?.id}-${mapChurches.length}-${mapCounters.total}`} center={mapChurches.length ? [mapChurches[0].lat, mapChurches[0].lng] as any : [30.05, 31.23] as any} zoom={11} style={{ height: '100%', width: '100%' } as any} scrollWheelZoom={true as any} whenReady={(map: any) => setTimeout(() => map.target.invalidateSize(), 100)}>
                     {/* @ts-ignore */}
                     <TileLayer attribution='&copy; OpenStreetMap' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
                     {mapChurches.map((church: any) => {

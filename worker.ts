@@ -845,24 +845,15 @@ app.get('/api/groups/:id/map', authenticateUser, async (c) => {
     if (!group) return c.json({ error: 'Group not found' }, 404);
     const governorate = group.governorate;
     if (!governorate || !isValidGovernorate(governorate)) return c.json({ churches: [], statuses: {}, counters: { total: 0, working: 0, notWorking: 0 }, canEdit: false, governorate: '' });
-    // Auto-sync real churches if none in DB for this governorate (so map shows real Google Maps churches)
-    let { data: churches } = await supabase.from('churches').select('*').eq('governorate', governorate).order('name');
-    if (!churches || churches.length === 0) {
-      try {
-        const real = await fetchRealChurchesFromOverpass(governorate);
-        for (const ch of real.slice(0, 50)) {
-          await supabase.from('churches').insert({ name: ch.name, governorate, lat: ch.lat, lng: ch.lng, address: ch.address });
-        }
-        const { data: refreshed } = await supabase.from('churches').select('*').eq('governorate', governorate).order('name');
-        churches = refreshed || [];
-      } catch {}
-    }
+    // Fast: return existing churches instantly (no blocking Overpass fetch). Real churches via manual sync button.
+    const { data: churches } = await supabase.from('churches').select('*').eq('governorate', governorate).order('name');
     const { data: statuses } = await supabase.from('group_churches').select('church_id,status').eq('group_id', id);
     const statusMap: Record<string, string> = {};
     (statuses || []).forEach((s: any) => statusMap[s.church_id] = s.status);
     const total = (churches || []).length;
     const working = Object.values(statusMap).filter(v => v === 'working').length;
     const canEdit = canManageGroupMap(user, group);
+    c.header('Cache-Control', 'private, max-age=30');
     return c.json({ governorate, churches: churches || [], statuses: statusMap, counters: { total, working, notWorking: total - working }, canEdit });
   } catch {
     return c.json({ error: 'Failed to load map' }, 500);
