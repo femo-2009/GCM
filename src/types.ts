@@ -57,6 +57,23 @@ export interface Group {
   photo: string;
   title: string;
   description: string;
+  governorate?: string; // one of 27 Egyptian governorates
+  managerEmail?: string; // gmail of leader assigned to manage this group's map (only this leader can toggle)
+}
+
+export interface Church {
+  id: string;
+  name: string;
+  governorate: string;
+  lat: number;
+  lng: number;
+  address: string;
+}
+
+export interface GroupChurchStatus {
+  groupId: string;
+  churchId: string;
+  status: 'working' | 'not_working';
 }
 
 export type LibraryType = 'text' | 'photo' | 'video';
