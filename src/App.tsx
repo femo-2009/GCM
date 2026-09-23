@@ -149,7 +149,7 @@ export default function App() {
           </AnimatePresence>
         </main>
         <LoadingBar />
-        <footer className="border-t border-slate-200 bg-white py-8 text-center text-xs text-slate-500">
+        <footer className="border-t border-slate-200 bg-white py-8 pb-28 md:pb-8 text-center text-xs text-slate-500">
           <div>{t.footerCopyright}</div>
           <div className="mt-1">
             {t.footerDeveloperLabel}{' — '}
