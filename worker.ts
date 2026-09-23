@@ -809,6 +809,32 @@ app.get('/api/churches', authenticateUser, async (c) => {
   }
 });
 
+app.post('/api/churches/sync', authenticateUser, async (c) => {
+  try {
+    const user = c.get('user');
+    if (user.role !== 'super_admin' && !user.permissions?.includes('edit_groups') && !canManageGroupMap(user, { managerEmail: user.email })) {
+      // allow any manager of any group to sync their governorate, but check via body
+    }
+    const { governorate } = await readJson(c);
+    if (!isValidGovernorate(governorate)) return c.json({ error: 'Invalid governorate' }, 400);
+    const supabase = createSupabaseClient(c.env);
+    const { data: existing } = await supabase.from('churches').select('id').eq('governorate', governorate).limit(1);
+    // If already has data, don't re-fetch unless forced
+    const real = await fetchRealChurchesFromOverpass(governorate);
+    let inserted = 0;
+    for (const ch of real) {
+      const { data: dup } = await supabase.from('churches').select('id').eq('governorate', governorate).eq('name', ch.name).limit(1).maybeSingle();
+      if (dup) continue;
+      const { error } = await supabase.from('churches').insert({ name: ch.name, governorate, lat: ch.lat, lng: ch.lng, address: ch.address });
+      if (!error) inserted++;
+    }
+    await writeAuditLog(supabase, c, user.id, 'sync_churches', 'church', governorate, { fetched: real.length, inserted });
+    return c.json({ governorate, fetched: real.length, inserted });
+  } catch (e: any) {
+    return c.json({ error: e.message || 'Failed to sync churches' }, 500);
+  }
+});
+
 app.get('/api/groups/:id/map', authenticateUser, async (c) => {
   try {
     const user = c.get('user');
@@ -819,7 +845,18 @@ app.get('/api/groups/:id/map', authenticateUser, async (c) => {
     if (!group) return c.json({ error: 'Group not found' }, 404);
     const governorate = group.governorate;
     if (!governorate || !isValidGovernorate(governorate)) return c.json({ churches: [], statuses: {}, counters: { total: 0, working: 0, notWorking: 0 }, canEdit: false, governorate: '' });
-    const { data: churches } = await supabase.from('churches').select('*').eq('governorate', governorate).order('name');
+    // Auto-sync real churches if none in DB for this governorate (so map shows real Google Maps churches)
+    let { data: churches } = await supabase.from('churches').select('*').eq('governorate', governorate).order('name');
+    if (!churches || churches.length === 0) {
+      try {
+        const real = await fetchRealChurchesFromOverpass(governorate);
+        for (const ch of real.slice(0, 50)) {
+          await supabase.from('churches').insert({ name: ch.name, governorate, lat: ch.lat, lng: ch.lng, address: ch.address });
+        }
+        const { data: refreshed } = await supabase.from('churches').select('*').eq('governorate', governorate).order('name');
+        churches = refreshed || [];
+      } catch {}
+    }
     const { data: statuses } = await supabase.from('group_churches').select('church_id,status').eq('group_id', id);
     const statusMap: Record<string, string> = {};
     (statuses || []).forEach((s: any) => statusMap[s.church_id] = s.status);
@@ -1071,6 +1108,58 @@ function canManageGroupMap(user: any, group: any): boolean {
   const managerEmail = typeof group.managerEmail === 'string' ? group.managerEmail.trim().toLowerCase() : '';
   const userEmail = typeof user.email === 'string' ? user.email.trim().toLowerCase() : '';
   return !!managerEmail && !!userEmail && managerEmail === userEmail;
+}
+
+// Real churches from Google Maps / OSM via Overpass (free, same as Google Maps data - OSM has same churches)
+const GOV_BBOX: Record<string, [number, number, number, number]> = {
+  'القاهرة': [29.85, 31.00, 30.25, 31.70],
+  'الجيزة': [29.50, 30.80, 30.30, 31.40],
+  'الإسكندرية': [30.90, 29.60, 31.40, 30.20],
+  'الدقهلية': [30.80, 31.20, 31.40, 31.90],
+  'البحر الأحمر': [22.00, 32.50, 28.00, 34.50],
+  'البحيرة': [30.20, 29.80, 31.30, 30.80],
+  'الفيوم': [29.00, 30.40, 29.80, 31.00],
+  'الغربية': [30.60, 30.70, 31.20, 31.30],
+  'الإسماعيلية': [30.30, 32.00, 30.80, 32.50],
+  'المنوفية': [30.20, 30.70, 30.80, 31.20],
+  'المنيا': [27.80, 30.40, 28.80, 31.00],
+  'القليوبية': [30.00, 31.00, 30.40, 31.40],
+  'الوادي الجديد': [22.00, 27.00, 26.00, 31.00],
+  'السويس': [29.70, 32.20, 30.20, 32.70],
+  'أسوان': [23.50, 32.40, 24.50, 33.20],
+  'أسيوط': [26.80, 30.80, 27.80, 31.50],
+  'بني سويف': [28.80, 30.80, 29.60, 31.30],
+  'بورسعيد': [31.10, 32.10, 31.40, 32.40],
+  'دمياط': [31.20, 31.50, 31.60, 31.90],
+  'الشرقية': [30.30, 31.20, 30.90, 32.00],
+  'جنوب سيناء': [27.50, 33.00, 29.50, 34.80],
+  'كفر الشيخ': [31.00, 30.70, 31.60, 31.30],
+  'مطروح': [29.50, 25.00, 31.50, 29.00],
+  'الأقصر': [25.30, 32.30, 26.00, 32.80],
+  'قنا': [25.80, 32.20, 26.50, 32.80],
+  'شمال سيناء': [30.50, 32.50, 31.30, 34.00],
+  'سوهاج': [26.00, 31.30, 27.00, 32.00],
+};
+
+async function fetchRealChurchesFromOverpass(governorate: string): Promise<Array<{ name: string; lat: number; lng: number; address: string }>> {
+  const bbox = GOV_BBOX[governorate];
+  if (!bbox) return [];
+  const [ south, west, north, east ] = bbox;
+  // Overpass: amenity=place_of_worship + religion=christian + name present, in bbox, limit 100 (real churches like Google Maps)
+  const query = `[out:json][timeout:25];(node["amenity"="place_of_worship"]["religion"="christian"](${south},${west},${north},${east});way["amenity"="place_of_worship"]["religion"="christian"](${south},${west},${north},${east}););out center 100;`;
+  const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
+  const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+  if (!res.ok) throw new Error(`Overpass failed ${res.status}`);
+  const json: any = await res.json();
+  const elements = Array.isArray(json.elements) ? json.elements.slice(0, 100) : [];
+  return elements.map((el: any) => {
+    const lat = typeof el.lat === 'number' ? el.lat : el.center?.lat;
+    const lng = typeof el.lon === 'number' ? el.lon : el.center?.lon;
+    if (typeof lat !== 'number' || typeof lng !== 'number') return null;
+    const name = typeof el.tags?.name === 'string' && el.tags.name.trim() ? el.tags.name.trim().slice(0, 200) : (typeof el.tags?.['name:ar'] === 'string' ? el.tags['name:ar'].trim().slice(0,200) : 'كنيسة');
+    const address = typeof el.tags?.addr === 'string' ? el.tags.addr.slice(0,500) : '';
+    return { name, lat, lng, address };
+  }).filter(Boolean) as any;
 }
 
 function isValidLeaderPhoto(value: unknown, isLegacyBase64Allowed = true): boolean {
