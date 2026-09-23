@@ -48,6 +48,7 @@ export interface Leader {
   name: string;
   description: string;
   groupId: string; // group this leader belongs to
+  photoPosition?: string; // CSS object-position for slider preview (e.g. "center", "top", "center 20%")
 }
 
 export interface Group {
