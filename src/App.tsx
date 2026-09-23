@@ -19,10 +19,7 @@ export default function App() {
   const [lang, setLang] = useState<Language>('ar');
   const [user, setUser] = useState<User | null>(null);
   const [groups, setGroups] = useState<Group[]>([]);
-  const [currentTab, setCurrentTab] = useState(() => {
-    if (typeof window === 'undefined') return 'home';
-    return localStorage.getItem('gcm_current_tab') || 'home';
-  });
+  const [currentTab, setCurrentTab] = useState('home');
 
   // One-step back for phone/tablet/laptop: tab changes push history so hardware back goes one tab back, not exit app
   const navigateTab = (tab: string) => {
@@ -44,10 +41,14 @@ export default function App() {
 
   const t = translations[lang];
 
-  // Persist current tab
+  // Always start on home when site/app is closed and reopened (not last tab)
   useEffect(() => {
-    localStorage.setItem('gcm_current_tab', currentTab);
-  }, [currentTab]);
+    try { localStorage.removeItem('gcm_current_tab'); } catch {}
+    // Clear any stale ?tab= query param on fresh load
+    if (window.location.search.includes('tab=')) {
+      try { window.history.replaceState({}, '', window.location.pathname); } catch {}
+    }
+  }, []);
 
   // Set HTML dir/lang attribute based on language
   useEffect(() => {
