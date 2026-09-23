@@ -940,11 +940,6 @@ export default function HomeView({ lang, user, groups, setGroups, onNavigate }: 
                           </label>
                           {leaderPhotoPreview && <button type="button" onClick={() => { setLeaderPhotoPosition('50% 50%'); setLeaderPhotoScale(1); }} className="text-[11px] text-slate-500 hover:text-slate-700 underline">{lang === 'ar' ? 'إعادة ضبط' : 'Reset fit'}</button>}
                         </div>
-                        <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-1">
-                          <p className="text-[11px] font-semibold text-slate-700">{lang === 'ar' ? 'مثل واتساب:' : 'Like WhatsApp:'}</p>
-                          <p className="text-[10px] text-slate-500 leading-relaxed">{lang === 'ar' ? '• اسحب الصورة داخل الإطار لتوسيط الوجه • استخدم شريط التكبير لتكبير/تصغير • المعاينة هي نفس ما سيظهر في السلايدر تماماً' : '• Drag photo inside frame to center face • Use zoom slider to zoom in/out • Preview is exactly what slider will show'}</p>
-                          <p className="text-[10px] font-mono bg-white border border-slate-200 rounded px-1.5 py-1 mt-1">pos: {leaderPhotoPosition} • scale: {leaderPhotoScale.toFixed(1)}</p>
-                        </div>
                       </div>
                     </div>
                   </div>
