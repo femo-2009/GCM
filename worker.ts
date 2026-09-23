@@ -995,13 +995,24 @@ function isValidLeaderPhoto(value: unknown, isLegacyBase64Allowed = true): boole
 
 async function signLeaderMediaValue(supabase: any, value: unknown): Promise<string> {
   if (typeof value !== 'string' || !isSafeLeaderMediaPath(value)) return typeof value === 'string' ? value : '';
+  // Best option: leader-media is public, use public URL (always works, even without bucket created yet it returns URL). Fallback to signed URL.
+  try {
+    const { data } = supabase.storage.from('leader-media').getPublicUrl(value);
+    if (data?.publicUrl) return data.publicUrl;
+  } catch {}
   const { data } = await supabase.storage.from('leader-media').createSignedUrl(value, 3600);
   return data?.signedUrl || value;
 }
 
 async function hydrateLeaders(supabase: any, leaders: any[]): Promise<any[]> {
   if (!Array.isArray(leaders) || leaders.length === 0) return leaders;
-  return Promise.all(leaders.map(async (l: any) => ({ ...l, photo: await signLeaderMediaValue(supabase, l.photo) })));
+  // Ensure every leader photo is resolved to a displayable URL (public or signed), never raw file path that looks like "leaders/..."
+  return Promise.all(leaders.map(async (l: any) => {
+    const photo = await signLeaderMediaValue(supabase, l.photo);
+    // If still raw path (bucket missing), return placeholder-friendly value so UI shows placeholder not "file"
+    const isRawPath = typeof photo === 'string' && photo.startsWith('leaders/');
+    return { ...l, photo: isRawPath ? '' : photo };
+  }));
 }
 
 app.post('/api/leader-media/upload', authenticateUser, async (c) => {

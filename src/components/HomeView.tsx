@@ -523,14 +523,24 @@ export default function HomeView({ lang, user, groups, setGroups, onNavigate }: 
                   >
                     <div className="relative h-32 sm:h-44 overflow-hidden bg-white flex items-center justify-center">
                       {/* blurred cover bg for nice fill when contain */}
-                      {leader.photo && <img src={leader.photo} alt="" aria-hidden className="absolute inset-0 w-full h-full object-cover blur-xl opacity-20 scale-110 pointer-events-none" style={{ objectPosition: (leader as any).photoPosition || '50% 50%' }} />}
-                      <img 
-                        src={leader.photo} 
-                        alt={leader.name}
-                        referrerPolicy="no-referrer"
-                        className="relative w-full h-full object-contain bg-white transition-all duration-500"
-                        style={{ objectPosition: (leader as any).photoPosition || '50% 50%', transform: `scale(${(leader as any).photoScale || 1})`, transformOrigin: (leader as any).photoPosition || '50% 50%' }}
-                      />
+                      {leader.photo ? (
+                        <>
+                          <img src={leader.photo} alt="" aria-hidden className="absolute inset-0 w-full h-full object-cover blur-xl opacity-20 scale-110 pointer-events-none" style={{ objectPosition: (leader as any).photoPosition || '50% 50%' }} />
+                          <img 
+                            src={leader.photo} 
+                            alt={leader.name}
+                            referrerPolicy="no-referrer"
+                            className="relative w-full h-full object-contain bg-white transition-all duration-500"
+                            style={{ objectPosition: (leader as any).photoPosition || '50% 50%', transform: `scale(${(leader as any).photoScale || 1})`, transformOrigin: (leader as any).photoPosition || '50% 50%' }}
+                            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                          />
+                        </>
+                      ) : (
+                        <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 bg-slate-50">
+                          <HelpCircle className="w-8 h-8 mb-1" />
+                          <span className="text-[10px]">{lang === 'ar' ? 'لا توجد صورة' : 'No photo'}</span>
+                        </div>
+                      )}
                       <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 via-transparent to-transparent opacity-85" />
                       
                     {/* Floating connected group label — clickable to visit group page */}
@@ -1010,12 +1020,17 @@ export default function HomeView({ lang, user, groups, setGroups, onNavigate }: 
                       key={leader.id}
                       className="flex items-center gap-4 p-3 bg-slate-50 border border-slate-150 rounded-2xl"
                     >
-                      <img 
-                        src={leader.photo} 
-                        alt={leader.name} 
-                        className="w-11 h-11 rounded-xl object-cover bg-white border border-slate-200" 
-                        style={{ objectPosition: (leader as any).photoPosition || '50% 50%', transform: `scale(${(leader as any).photoScale || 1})`, transformOrigin: (leader as any).photoPosition || '50% 50%' }}
-                      />
+                      {leader.photo ? (
+                        <img 
+                          src={leader.photo} 
+                          alt={leader.name} 
+                          className="w-11 h-11 rounded-xl object-contain bg-white border border-slate-200" 
+                          style={{ objectPosition: (leader as any).photoPosition || '50% 50%', transform: `scale(${(leader as any).photoScale || 1})`, transformOrigin: (leader as any).photoPosition || '50% 50%' }}
+                          onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                        />
+                      ) : (
+                        <div className="w-11 h-11 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-400"><HelpCircle className="w-5 h-5" /></div>
+                      )}
                       <div className="flex-1 min-w-0">
                         <h4 className="text-xs md:text-sm font-bold text-slate-800 truncate">{leader.name}</h4>
                         <p className="text-[10px] text-slate-500 truncate">

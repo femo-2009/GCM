@@ -554,7 +554,7 @@ INSERT INTO storage.buckets (
 VALUES (
   'leader-media',
   'leader-media',
-  false,
+  true,
   5242880,
   ARRAY[
     'image/jpeg',
@@ -564,7 +564,7 @@ VALUES (
 )
 ON CONFLICT (id)
 DO UPDATE SET
-  public = false,
+  public = true,
   file_size_limit = 5242880,
   allowed_mime_types = ARRAY[
     'image/jpeg',
