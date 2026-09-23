@@ -1144,7 +1144,16 @@ function canManageGroupMap(user: any, group: any): boolean {
   return !!managerEmail && !!userEmail && managerEmail === userEmail;
 }
 
-// Real churches from Google Maps / OSM via Overpass (free, same as Google Maps data - OSM has same churches)
+// Real churches - ALL per governorate like Google Maps (no limit)
+const GOV_EN: Record<string, string> = {
+  'القاهرة': 'Cairo', 'الجيزة': 'Giza', 'الإسكندرية': 'Alexandria', 'الدقهلية': 'Dakahlia',
+  'البحر الأحمر': 'Red Sea', 'البحيرة': 'Beheira', 'الفيوم': 'Faiyum', 'الغربية': 'Gharbia',
+  'الإسماعيلية': 'Ismailia', 'المنوفية': 'Monufia', 'المنيا': 'Minya', 'القليوبية': 'Qalyubia',
+  'الوادي الجديد': 'New Valley', 'السويس': 'Suez', 'أسوان': 'Aswan', 'أسيوط': 'Asyut',
+  'بني سويف': 'Beni Suef', 'بورسعيد': 'Port Said', 'دمياط': 'Damietta', 'الشرقية': 'Sharqia',
+  'جنوب سيناء': 'South Sinai', 'كفر الشيخ': 'Kafr el-Sheikh', 'مطروح': 'Matrouh',
+  'الأقصر': 'Luxor', 'قنا': 'Qena', 'شمال سيناء': 'North Sinai', 'سوهاج': 'Sohag'
+};
 const GOV_BBOX: Record<string, [number, number, number, number]> = {
   'القاهرة': [29.85, 31.00, 30.25, 31.70],
   'الجيزة': [29.50, 30.80, 30.30, 31.40],
@@ -1176,19 +1185,23 @@ const GOV_BBOX: Record<string, [number, number, number, number]> = {
 };
 
 async function fetchRealChurchesFromOverpass(governorate: string): Promise<Array<{ name: string; lat: number; lng: number; address: string }>> {
+  const en = GOV_EN[governorate] || governorate;
   const bbox = GOV_BBOX[governorate];
   if (!bbox) return [];
   const [ south, west, north, east ] = bbox;
-  // ONLY churches - all Christian sects (Orthodox, Catholic, Evangelical, etc.) - religion=christian covers all, building=church as fallback, never mosques/charities
-  const query = `[out:json][timeout:60];(nwr["amenity"="place_of_worship"]["religion"="christian"](${south},${west},${north},${east});nwr["building"="church"](${south},${west},${north},${east});nwr["amenity"="place_of_worship"]["denomination"](${south},${west},${north},${east}););out center;`;
+  // ALL churches like Google Maps - try area first (more accurate), fallback to bbox - all denominations, no limit
+  const areaQuery = `[out:json][timeout:60];area["name"="${en}"]["admin_level"~"4|5"]->.a;(nwr["amenity"="place_of_worship"]["religion"="christian"](area.a);nwr["building"="church"](area.a);nwr["amenity"="place_of_worship"]["denomination"](area.a););out center;`;
+  const bboxQuery = `[out:json][timeout:60];(nwr["amenity"="place_of_worship"]["religion"="christian"](${south},${west},${north},${east});nwr["building"="church"](${south},${west},${north},${east});nwr["amenity"="place_of_worship"]["denomination"](${south},${west},${north},${east}););out center;`;
+  const queries = [areaQuery, bboxQuery];
   const endpoints = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
-  for (const endpoint of endpoints) {
-    try {
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'GCM/1.0 (contact: admin@gcm.local)' },
-        body: `data=${encodeURIComponent(query)}`
-      });
+  for (const query of queries) {
+    for (const endpoint of endpoints) {
+      try {
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'GCM/1.0 (contact: admin@gcm.local)' },
+          body: `data=${encodeURIComponent(query)}`
+        });
       if (!res.ok) {
         const txt = await res.text().catch(() => '');
         throw new Error(`Overpass ${endpoint} failed ${res.status} ${txt.slice(0,200)}`);
@@ -1207,9 +1220,10 @@ async function fetchRealChurchesFromOverpass(governorate: string): Promise<Array
         return { name, lat, lng, address };
       }).filter(Boolean) as any;
       if (churches.length > 0) return churches;
-    } catch (e) {
-      console.error('Overpass endpoint failed', endpoint, e);
-      continue;
+      } catch (e) {
+        console.error('Overpass endpoint failed', endpoint, e);
+        continue;
+      }
     }
   }
   return [];
