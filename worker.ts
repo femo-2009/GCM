@@ -1145,21 +1145,44 @@ async function fetchRealChurchesFromOverpass(governorate: string): Promise<Array
   const bbox = GOV_BBOX[governorate];
   if (!bbox) return [];
   const [ south, west, north, east ] = bbox;
-  // Overpass: amenity=place_of_worship + religion=christian + name present, in bbox, limit 100 (real churches like Google Maps)
-  const query = `[out:json][timeout:25];(node["amenity"="place_of_worship"]["religion"="christian"](${south},${west},${north},${east});way["amenity"="place_of_worship"]["religion"="christian"](${south},${west},${north},${east}););out center 100;`;
-  const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
-  const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
-  if (!res.ok) throw new Error(`Overpass failed ${res.status}`);
-  const json: any = await res.json();
-  const elements = Array.isArray(json.elements) ? json.elements.slice(0, 100) : [];
-  return elements.map((el: any) => {
-    const lat = typeof el.lat === 'number' ? el.lat : el.center?.lat;
-    const lng = typeof el.lon === 'number' ? el.lon : el.center?.lon;
-    if (typeof lat !== 'number' || typeof lng !== 'number') return null;
-    const name = typeof el.tags?.name === 'string' && el.tags.name.trim() ? el.tags.name.trim().slice(0, 200) : (typeof el.tags?.['name:ar'] === 'string' ? el.tags['name:ar'].trim().slice(0,200) : 'كنيسة');
-    const address = typeof el.tags?.addr === 'string' ? el.tags.addr.slice(0,500) : '';
-    return { name, lat, lng, address };
-  }).filter(Boolean) as any;
+  // Fix 406: use POST with form-encoded, broader query (all place_of_worship + building=church, then filter), limit 100
+  const query = `[out:json][timeout:25];(node["amenity"="place_of_worship"](${south},${west},${north},${east});way["amenity"="place_of_worship"](${south},${west},${north},${east});node["building"="church"](${south},${west},${north},${east});way["building"="church"](${south},${west},${north},${east}););out center 100;`;
+  const endpoints = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
+  for (const endpoint of endpoints) {
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'GCM/1.0 (contact: admin@gcm.local)' },
+        body: `data=${encodeURIComponent(query)}`
+      });
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        throw new Error(`Overpass ${endpoint} failed ${res.status} ${txt.slice(0,200)}`);
+      }
+      const json: any = await res.json();
+      const elements = Array.isArray(json.elements) ? json.elements.slice(0, 100) : [];
+      const churches = elements.map((el: any) => {
+        const lat = typeof el.lat === 'number' ? el.lat : el.center?.lat;
+        const lng = typeof el.lon === 'number' ? el.lon : el.center?.lon;
+        if (typeof lat !== 'number' || typeof lng !== 'number') return null;
+        // filter to likely Christian churches (if tag religion exists and not christian, skip)
+        const religion = el.tags?.religion;
+        if (religion && religion !== 'christian' && religion !== 'مسلم' && religion !== 'christian') {
+          // keep only christian or no religion (many churches missing religion tag)
+          if (religion !== 'christian') return null;
+        }
+        const name = typeof el.tags?.name === 'string' && el.tags.name.trim() ? el.tags.name.trim().slice(0, 200) : (typeof el.tags?.['name:ar'] === 'string' ? el.tags['name:ar'].trim().slice(0,200) : (typeof el.tags?.['name:en'] === 'string' ? el.tags['name:en'].trim().slice(0,200) : 'كنيسة'));
+        if (!name || name === 'كنيسة' && !el.tags?.amenity && !el.tags?.building) return null;
+        const address = typeof el.tags?.['addr:full'] === 'string' ? el.tags['addr:full'].slice(0,500) : (typeof el.tags?.addr === 'string' ? el.tags.addr.slice(0,500) : '');
+        return { name, lat, lng, address };
+      }).filter(Boolean) as any;
+      if (churches.length > 0) return churches;
+    } catch (e) {
+      console.error('Overpass endpoint failed', endpoint, e);
+      continue;
+    }
+  }
+  return [];
 }
 
 function isValidLeaderPhoto(value: unknown, isLegacyBase64Allowed = true): boolean {
