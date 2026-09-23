@@ -52,6 +52,7 @@ export default function HomeView({ lang, user, groups, setGroups, onNavigate }: 
   const [isDraggingPhoto, setIsDraggingPhoto] = useState(false);
   const leaderFormRef = useRef<HTMLFormElement>(null);
   const editorRef = useRef<HTMLDivElement>(null);
+  const dragStartRef = useRef<{ x: number; y: number; posX: number; posY: number } | null>(null);
 
   // Detailed Leader View Modal
   const [selectedLeader, setSelectedLeader] = useState<Leader | null>(null);
@@ -212,22 +213,33 @@ export default function HomeView({ lang, user, groups, setGroups, onNavigate }: 
     }
   };
 
-  // WhatsApp-style drag to adjust photo crop (like WhatsApp profile photo)
+  // WhatsApp-style smooth drag (delta-based) + fit
   const handleEditorPointerDown = (e: React.MouseEvent | React.TouchEvent) => {
-    if (!leaderPhotoPreview) return;
-    setIsDraggingPhoto(true);
-  };
-  const handleEditorPointerMove = (e: React.MouseEvent | React.TouchEvent) => {
-    if (!isDraggingPhoto || !editorRef.current) return;
+    if (!leaderPhotoPreview || !editorRef.current) return;
     const rect = editorRef.current.getBoundingClientRect();
     const clientX = (e as any).touches ? (e as any).touches[0].clientX : (e as any).clientX;
     const clientY = (e as any).touches ? (e as any).touches[0].clientY : (e as any).clientY;
-    const xPct = Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100));
-    const yPct = Math.max(0, Math.min(100, ((clientY - rect.top) / rect.height) * 100));
-    // WhatsApp: dragging moves the focal point; we set object-position to where user dragged
+    const [posX, posY] = leaderPhotoPosition.split(' ').map(v => parseInt(v) || 50);
+    dragStartRef.current = { x: clientX, y: clientY, posX, posY };
+    setIsDraggingPhoto(true);
+  };
+  const handleEditorPointerMove = (e: React.MouseEvent | React.TouchEvent) => {
+    if (!isDraggingPhoto || !editorRef.current || !dragStartRef.current) return;
+    const rect = editorRef.current.getBoundingClientRect();
+    const clientX = (e as any).touches ? (e as any).touches[0].clientX : (e as any).clientX;
+    const clientY = (e as any).touches ? (e as any).touches[0].clientY : (e as any).clientY;
+    const dx = clientX - dragStartRef.current.x;
+    const dy = clientY - dragStartRef.current.y;
+    // sensitivity tuned for good fit - move 1px ≈ 0.5% 
+    const sensitivity = 0.6;
+    const xPct = Math.max(0, Math.min(100, dragStartRef.current.posX - (dx / rect.width) * 100 * sensitivity));
+    const yPct = Math.max(0, Math.min(100, dragStartRef.current.posY - (dy / rect.height) * 100 * sensitivity));
     setLeaderPhotoPosition(`${Math.round(xPct)}% ${Math.round(yPct)}%`);
   };
-  const handleEditorPointerUp = () => setIsDraggingPhoto(false);
+  const handleEditorPointerUp = () => {
+    setIsDraggingPhoto(false);
+    dragStartRef.current = null;
+  };
 
   // General Plan update
   const handleSavePlan = async () => {
@@ -884,13 +896,23 @@ export default function HomeView({ lang, user, groups, setGroups, onNavigate }: 
                     />
                   </div>
 
-                  {/* Leader Photo - WhatsApp-style fit: drag + zoom */}
-                  <div className="space-y-3 bg-white border border-slate-200 rounded-2xl p-4">
-                    <label className="block text-xs font-bold text-slate-700">{lang === 'ar' ? 'صورة القائد - مثل واتساب (اسحب للتوسيط + تكبير)' : 'Leader Photo - WhatsApp fit (drag to reposition + zoom)'} <span className="font-normal text-[10px] text-slate-400">({lang === 'ar' ? 'آمن: jpeg/png/webp حتى 5MB' : 'secure: jpeg/png/webp max 5MB'})</span></label>
-                    <div className="grid md:grid-cols-2 gap-4 items-start">
-                      {/* WhatsApp-style editor - drag to fit */}
-                      <div className="space-y-2">
-                        <span className="text-[11px] font-semibold text-slate-500">{lang === 'ar' ? 'اسحب الصورة داخل الإطار كما في واتساب' : 'Drag photo inside frame like WhatsApp'}</span>
+                  {/* Leader Photo - WhatsApp-style fit: improved window for better fit */}
+                  <div className="space-y-3 bg-gradient-to-br from-slate-50 to-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-xs font-bold text-slate-800">{lang === 'ar' ? 'صورة القائد - معاينة واتساب' : 'Leader Photo - WhatsApp Preview'} <span className="font-normal text-[10px] text-slate-400">jpeg/png/webp ≤5MB</span></label>
+                      <div className="flex items-center gap-2">
+                        <label className={`px-3 py-1.5 rounded-xl text-[11px] font-bold border shadow-sm transition-all cursor-pointer ${isUploadingLeaderPhoto ? 'bg-slate-100 text-slate-400 border-slate-200' : 'bg-indigo-600 text-white hover:bg-indigo-700 border-indigo-600 hover:shadow-md'}`}>
+                          <span>{isUploadingLeaderPhoto ? (lang === 'ar' ? 'جاري الرفع...' : 'Uploading...') : (lang === 'ar' ? 'اختيار صورة' : 'Choose')}</span>
+                          <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" disabled={isUploadingLeaderPhoto} onChange={handleLeaderPhotoUpload} />
+                        </label>
+                        {leaderPhotoPreview && <button type="button" onClick={() => { setLeaderPhotoPosition('50% 50%'); setLeaderPhotoScale(1); }} className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-[11px] font-semibold text-slate-600 hover:bg-slate-50">{lang === 'ar' ? 'إعادة ضبط' : 'Reset'}</button>}
+                      </div>
+                    </div>
+
+                    <div className="grid md:grid-cols-[1.1fr_0.9fr] gap-4">
+                      {/* WhatsApp square editor - better fit */}
+                      <div className="space-y-2.5">
+                        <span className="text-[11px] font-bold text-indigo-700 flex items-center gap-1"><span className="w-1.5 h-1.5 bg-indigo-600 rounded-full animate-pulse" />{lang === 'ar' ? 'اسحب لتوسيط - مثل واتساب' : 'Drag to center - like WhatsApp'}</span>
                         <div
                           ref={editorRef}
                           onMouseDown={handleEditorPointerDown}
@@ -900,46 +922,61 @@ export default function HomeView({ lang, user, groups, setGroups, onNavigate }: 
                           onTouchStart={handleEditorPointerDown}
                           onTouchMove={handleEditorPointerMove}
                           onTouchEnd={handleEditorPointerUp}
-                          className="relative w-full max-w-[260px] h-44 overflow-hidden bg-slate-100 border border-slate-200 rounded-2xl shadow-sm select-none"
-                          style={{ cursor: leaderPhotoPreview ? (isDraggingPhoto ? 'grabbing' : 'grab') : 'default', touchAction: 'none' }}
+                          className="relative w-full aspect-square max-w-[300px] mx-auto overflow-hidden bg-slate-900 border-2 border-white shadow-xl rounded-2xl select-none"
+                          style={{ cursor: leaderPhotoPreview ? (isDraggingPhoto ? 'grabbing' : 'grab') : 'default', touchAction: 'none', background: 'radial-gradient(circle at center, #1e293b 0%, #0f172a 100%)' }}
                         >
                           {leaderPhotoPreview ? (
-                            <img
-                              src={leaderPhotoPreview}
-                              alt="Preview"
-                              draggable={false}
-                              className="w-full h-full object-cover"
-                              style={{ objectPosition: leaderPhotoPosition, transform: `scale(${leaderPhotoScale})`, transformOrigin: leaderPhotoPosition }}
-                            />
+                            <>
+                              {/* blurred background for shrink fit */}
+                              <img src={leaderPhotoPreview} alt="" className="absolute inset-0 w-full h-full object-cover blur-xl opacity-40 scale-110 pointer-events-none" style={{ objectPosition: leaderPhotoPosition }} />
+                              <img
+                                src={leaderPhotoPreview}
+                                alt="Preview"
+                                draggable={false}
+                                className="relative w-full h-full object-cover"
+                                style={{ objectPosition: leaderPhotoPosition, transform: `scale(${leaderPhotoScale})`, transformOrigin: leaderPhotoPosition }}
+                              />
+                              {/* grid overlay for better alignment */}
+                              <div className="absolute inset-0 pointer-events-none opacity-20" style={{ backgroundImage: 'linear-gradient(to right, white 1px, transparent 1px), linear-gradient(to bottom, white 1px, transparent 1px)', backgroundSize: '33.33% 33.33%' }} />
+                              <div className="absolute inset-0 rounded-2xl border border-white/20 pointer-events-none" />
+                            </>
                           ) : (
-                            <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 gap-1">
-                              <HelpCircle className="w-6 h-6" />
-                              <span className="text-[10px]">{lang === 'ar' ? 'لا توجد صورة - اختر صورة أولاً' : 'No image - choose one first'}</span>
+                            <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 gap-2">
+                              <div className="w-14 h-14 rounded-full bg-white/10 flex items-center justify-center"><HelpCircle className="w-7 h-7 text-white/60" /></div>
+                              <span className="text-xs text-white/70">{lang === 'ar' ? 'اختر صورة للمعاينة' : 'Choose image to preview'}</span>
                             </div>
                           )}
-                          <div className="absolute inset-0 bg-gradient-to-t from-slate-900/30 to-transparent pointer-events-none" />
-                          {leaderPhotoPreview && <div className="absolute top-2 right-2 bg-black/60 text-white text-[9px] px-2 py-0.5 rounded-full pointer-events-none">{lang === 'ar' ? 'اسحب للتحريك' : 'Drag to move'}</div>}
                         </div>
                         {leaderPhotoPreview && (
-                          <div className="space-y-1 max-w-[260px]">
+                          <div className="bg-white border border-slate-200 rounded-xl p-3 space-y-2 max-w-[300px] mx-auto">
                             <div className="flex items-center justify-between">
-                              <span className="text-[11px] font-semibold text-slate-600">{lang === 'ar' ? 'تكبير' : 'Zoom'}</span>
-                              <span className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded font-mono">{leaderPhotoScale.toFixed(1)}x</span>
+                              <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5"><span className="text-sm">🔍</span> {lang === 'ar' ? 'تصغير / تكبير' : 'Shrink / Zoom'}</span>
+                              <span className="text-xs bg-indigo-600 text-white px-2 py-0.5 rounded-full font-mono font-bold">{leaderPhotoScale.toFixed(1)}x</span>
                             </div>
-                            <input type="range" min={0.5} max={3} step={0.1} value={leaderPhotoScale} onChange={(e) => setLeaderPhotoScale(parseFloat(e.target.value))} className="w-full accent-indigo-600" />
-                            <div className="flex justify-between text-[9px] text-slate-400"><span>0.5x {lang === 'ar' ? 'تصغير' : 'shrink'}</span><span>3x {lang === 'ar' ? 'تكبير' : 'zoom'}</span></div>
+                            <input type="range" min={0.5} max={3} step={0.05} value={leaderPhotoScale} onChange={(e) => setLeaderPhotoScale(parseFloat(e.target.value))} className="w-full accent-indigo-600 h-2" />
+                            <div className="flex justify-between text-[10px] font-medium text-slate-500"><span>0.5x {lang === 'ar' ? 'أصغر' : 'smaller'}</span><span className="text-indigo-600 font-bold">1.0x {lang === 'ar' ? 'مطابق' : 'fit'}</span><span>3.0x {lang === 'ar' ? 'أكبر' : 'bigger'}</span></div>
                           </div>
                         )}
                       </div>
-                      {/* Upload + hint + reset */}
-                      <div className="space-y-3">
-                        <div className="flex items-center gap-3">
-                          <label className={`px-3 py-2 rounded-xl text-[11px] font-bold border transition-colors cursor-pointer ${isUploadingLeaderPhoto ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-700 border-indigo-600'}`}>
-                            <span>{isUploadingLeaderPhoto ? (lang === 'ar' ? 'جاري الرفع...' : 'Uploading...') : (lang === 'ar' ? 'اختيار صورة' : 'Choose Image')}</span>
-                            <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" disabled={isUploadingLeaderPhoto} onChange={handleLeaderPhotoUpload} />
-                          </label>
-                          {leaderPhotoPreview && <button type="button" onClick={() => { setLeaderPhotoPosition('50% 50%'); setLeaderPhotoScale(1); }} className="text-[11px] text-slate-500 hover:text-slate-700 underline">{lang === 'ar' ? 'إعادة ضبط' : 'Reset fit'}</button>}
+
+                      {/* Live slider card preview - exactly as will appear */}
+                      <div className="space-y-2.5">
+                        <span className="text-[11px] font-bold text-emerald-700 flex items-center gap-1"><span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />{lang === 'ar' ? 'معاينة السلايدر الحقيقية' : 'Live slider card'}</span>
+                        <div className="w-full max-w-[260px] mx-auto bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-md">
+                          <div className="relative h-44 overflow-hidden bg-slate-100">
+                            {leaderPhotoPreview ? (
+                              <img src={leaderPhotoPreview} alt="Slider Preview" className="w-full h-full object-cover" style={{ objectPosition: leaderPhotoPosition, transform: `scale(${leaderPhotoScale})`, transformOrigin: leaderPhotoPosition }} />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-slate-300"><HelpCircle className="w-8 h-8" /></div>
+                            )}
+                            <div className="absolute inset-0 bg-gradient-to-t from-slate-900/50 via-transparent to-transparent" />
+                            <div className="absolute bottom-2 left-2 right-2 bg-white/95 backdrop-blur rounded-xl px-3 py-2">
+                              <div className="h-3 w-20 bg-slate-800 rounded mb-1" />
+                              <div className="h-2 w-full bg-slate-400 rounded opacity-60" />
+                            </div>
+                          </div>
                         </div>
+                        <p className="text-[10px] text-slate-500 text-center leading-relaxed">{lang === 'ar' ? 'هذه المعاينة مطابقة 100% لما سيظهر في سلايدر الصفحة الرئيسية' : 'This preview is 100% identical to the home slider'}</p>
                       </div>
                     </div>
                   </div>
