@@ -24,6 +24,24 @@ export default function App() {
     return localStorage.getItem('gcm_current_tab') || 'home';
   });
 
+  // One-step back for phone/tablet/laptop: tab changes push history so hardware back goes one tab back, not exit app
+  const navigateTab = (tab: string) => {
+    if (tab === currentTab) return;
+    try { window.history.pushState({ tab: currentTab }, '', `?tab=${tab}`); } catch {}
+    setCurrentTab(tab);
+  };
+
+  useEffect(() => {
+    const onPop = (e: PopStateEvent) => {
+      const prevTab = (e.state as any)?.tab;
+      if (prevTab && typeof prevTab === 'string') {
+        setCurrentTab(prevTab);
+      }
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
   const t = translations[lang];
 
   // Persist current tab
@@ -99,7 +117,7 @@ export default function App() {
       <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans">
         <Navbar
           currentTab={currentTab}
-          setCurrentTab={setCurrentTab}
+          setCurrentTab={navigateTab}
           lang={lang}
           setLang={setLang}
           user={user}
@@ -107,11 +125,11 @@ export default function App() {
         />
         <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pb-12">
           {currentTab === 'home' && (
-            <HomeView lang={lang} user={user} groups={groups} setGroups={setGroups} onNavigate={setCurrentTab} />
+            <HomeView lang={lang} user={user} groups={groups} setGroups={setGroups} onNavigate={navigateTab} />
           )}
           {currentTab === 'library' && <LibraryView lang={lang} user={user} />}
           {currentTab === 'groups' && (
-            <GroupsView lang={lang} user={user} groups={groups} setGroups={setGroups} onNavigate={setCurrentTab} />
+            <GroupsView lang={lang} user={user} groups={groups} setGroups={setGroups} onNavigate={navigateTab} />
           )}
           {currentTab === 'gcm' && (
             <GCMView lang={lang} user={user} onUserUpdate={handleUserUpdate} />

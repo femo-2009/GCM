@@ -102,6 +102,52 @@ export default function HomeView({ lang, user, groups, setGroups, onNavigate }: 
     }
   }, [leaders]);
 
+  // One-step back: phone/tablet/laptop hardware back closes modal only, not exit app
+  useEffect(() => {
+    if (!selectedLeader) return;
+    const onPop = () => setSelectedLeader(null);
+    window.history.pushState({ modal: 'leaderDetails' }, '');
+    window.addEventListener('popstate', onPop, { once: true });
+    return () => {
+      window.removeEventListener('popstate', onPop);
+      if (window.history.state?.modal === 'leaderDetails') window.history.back();
+    };
+  }, [selectedLeader]);
+
+  useEffect(() => {
+    if (!isManagingLeaders) return;
+    const onPop = () => setIsManagingLeaders(false);
+    window.history.pushState({ modal: 'manageLeaders' }, '');
+    window.addEventListener('popstate', onPop, { once: true });
+    return () => {
+      window.removeEventListener('popstate', onPop);
+      if (window.history.state?.modal === 'manageLeaders') window.history.back();
+    };
+  }, [isManagingLeaders]);
+
+  useEffect(() => {
+    if (!isViewingPlanDetails) return;
+    const onPop = () => setIsViewingPlanDetails(false);
+    window.history.pushState({ modal: 'planDetails' }, '');
+    window.addEventListener('popstate', onPop, { once: true });
+    return () => {
+      window.removeEventListener('popstate', onPop);
+      if (window.history.state?.modal === 'planDetails') window.history.back();
+    };
+  }, [isViewingPlanDetails]);
+
+  useEffect(() => {
+    if (!isEditingWelcome && !isEditingPlan) return;
+    const modal = isEditingWelcome ? 'editWelcome' : 'editPlan';
+    const onPop = () => { setIsEditingWelcome(false); setIsEditingPlan(false); };
+    window.history.pushState({ modal }, '');
+    window.addEventListener('popstate', onPop, { once: true });
+    return () => {
+      window.removeEventListener('popstate', onPop);
+      if (window.history.state?.modal === modal) window.history.back();
+    };
+  }, [isEditingWelcome, isEditingPlan]);
+
   const [isSliderHovered, setIsSliderHovered] = useState(false);
 
   // Number of copies needed so content always fills the viewport (no white space)

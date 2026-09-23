@@ -91,6 +91,29 @@ export default function GroupsView({ lang, user, groups, setGroups, onNavigate }
     }
   }, [groups]);
 
+  // One-step back: hardware back closes modal only, not exit app (phone/tablet/laptop)
+  useEffect(() => {
+    if (!selectedGroup) return;
+    const onPop = () => setSelectedGroup(null);
+    window.history.pushState({ modal: 'groupDetails' }, '');
+    window.addEventListener('popstate', onPop, { once: true });
+    return () => {
+      window.removeEventListener('popstate', onPop);
+      if (window.history.state?.modal === 'groupDetails') window.history.back();
+    };
+  }, [selectedGroup]);
+
+  useEffect(() => {
+    if (!isAdding) return;
+    const onPop = () => { setIsAdding(false); setEditingGroup(null); };
+    window.history.pushState({ modal: 'groupForm' }, '');
+    window.addEventListener('popstate', onPop, { once: true });
+    return () => {
+      window.removeEventListener('popstate', onPop);
+      if (window.history.state?.modal === 'groupForm') window.history.back();
+    };
+  }, [isAdding]);
+
   // Form states
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
