@@ -624,13 +624,14 @@ app.post('/api/leaders', authenticateUser, async (c) => {
       return c.json({ error: 'Forbidden - Insufficient permissions' }, 403);
     }
     const supabase = createSupabaseClient(c.env);
-    const { name, description, photo, groupId, photoPosition, photoScale } = await readJson(c);
+    const { name, description, photo, groupId, photoPosition, photoScale, email } = await readJson(c);
     const trimmedName = typeof name === 'string' ? name.trim() : '';
     if (!validLeaderText(trimmedName, 100, true)) return c.json({ error: 'Leader name is required (2-100 chars)', code: 'invalid_name' }, 400);
     if (description !== undefined && !validLeaderText(description, 5000)) return c.json({ error: 'Description is too long (max 5000)', code: 'invalid_description' }, 400);
     if (photo !== undefined && !isValidLeaderPhoto(photo, true)) return c.json({ error: 'Invalid photo', code: 'invalid_photo' }, 400);
     if (photoPosition !== undefined && !validLeaderPhotoPosition(photoPosition)) return c.json({ error: 'Invalid photo position', code: 'invalid_photo_position' }, 400);
     if (photoScale !== undefined && !validLeaderPhotoScale(photoScale)) return c.json({ error: 'Invalid photo scale (0.5-3)', code: 'invalid_photo_scale' }, 400);
+    if (email !== undefined && !isValidLeaderEmail(email)) return c.json({ error: 'Leader email must be a valid Gmail', code: 'invalid_email' }, 400);
     if (groupId && typeof groupId === 'string' && groupId !== '') {
       if (groupId.length > 100) return c.json({ error: 'Invalid group', code: 'invalid_group' }, 400);
     }
@@ -645,7 +646,8 @@ app.post('/api/leaders', authenticateUser, async (c) => {
       return c.json({ error: 'Leader with this name already exists', code: 'duplicate_name' }, 400);
     }
     const safeScale = photoScale !== undefined && validLeaderPhotoScale(photoScale) ? Number(photoScale) : 1;
-    const newLeader = { id: `leader-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`, name: trimmedName, description: typeof description === 'string' ? description.trim() : '', photo: typeof photo === 'string' ? photo : '', groupId: typeof groupId === 'string' ? groupId : '', photoPosition: validLeaderPhotoPosition(photoPosition) ? photoPosition : '50% 50%', photoScale: safeScale };
+    const safeEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
+    const newLeader = { id: `leader-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`, name: trimmedName, description: typeof description === 'string' ? description.trim() : '', photo: typeof photo === 'string' ? photo : '', groupId: typeof groupId === 'string' ? groupId : '', photoPosition: validLeaderPhotoPosition(photoPosition) ? photoPosition : '50% 50%', photoScale: safeScale, email: safeEmail };
     await saveAppData(supabase, { ...appData, leaders: [...leaders, newLeader] });
     await writeAuditLog(supabase, c, user.id, 'create_leader', 'leader', newLeader.id, { name: trimmedName });
     // hydrate before returning so client sees signed URL if needed
@@ -665,12 +667,13 @@ app.put('/api/leaders/:id', authenticateUser, async (c) => {
     const supabase = createSupabaseClient(c.env);
     const { id } = c.req.param();
     if (typeof id !== 'string' || id.length > 100) return c.json({ error: 'Invalid leader ID', code: 'invalid_id' }, 400);
-    const { name, description, photo, groupId, photoPosition, photoScale } = await readJson(c);
+    const { name, description, photo, groupId, photoPosition, photoScale, email } = await readJson(c);
     if (name !== undefined && !validLeaderText(String(name).trim(), 100, true)) return c.json({ error: 'Invalid name (2-100 chars)', code: 'invalid_name' }, 400);
     if (description !== undefined && !validLeaderText(description, 5000)) return c.json({ error: 'Description is too long', code: 'invalid_description' }, 400);
     if (photo !== undefined && !isValidLeaderPhoto(photo, true)) return c.json({ error: 'Invalid photo', code: 'invalid_photo' }, 400);
     if (photoPosition !== undefined && !validLeaderPhotoPosition(photoPosition)) return c.json({ error: 'Invalid photo position', code: 'invalid_photo_position' }, 400);
     if (photoScale !== undefined && !validLeaderPhotoScale(photoScale)) return c.json({ error: 'Invalid photo scale', code: 'invalid_photo_scale' }, 400);
+    if (email !== undefined && !isValidLeaderEmail(email)) return c.json({ error: 'Leader email must be a valid Gmail', code: 'invalid_email' }, 400);
     if (groupId !== undefined && typeof groupId === 'string' && groupId !== '' && groupId.length > 100) return c.json({ error: 'Invalid group', code: 'invalid_group' }, 400);
     const appData = await getAppData(supabase);
     const leaders = appData.leaders || [];
@@ -683,7 +686,7 @@ app.put('/api/leaders/:id', authenticateUser, async (c) => {
     if (name && leaders.some((l: any, i: number) => i !== idx && l.name.trim().toLowerCase() === String(name).trim().toLowerCase())) {
       return c.json({ error: 'Another leader with this name already exists', code: 'duplicate_name' }, 400);
     }
-    leaders[idx] = { ...leaders[idx], name: name !== undefined ? String(name).trim() : leaders[idx].name, description: description !== undefined ? String(description).trim() : leaders[idx].description, photo: photo !== undefined ? photo : leaders[idx].photo, groupId: groupId !== undefined ? groupId : leaders[idx].groupId, photoPosition: photoPosition !== undefined ? photoPosition : (leaders[idx].photoPosition || '50% 50%'), photoScale: photoScale !== undefined ? Number(photoScale) : (leaders[idx].photoScale || 1) };
+    leaders[idx] = { ...leaders[idx], name: name !== undefined ? String(name).trim() : leaders[idx].name, description: description !== undefined ? String(description).trim() : leaders[idx].description, photo: photo !== undefined ? photo : leaders[idx].photo, groupId: groupId !== undefined ? groupId : leaders[idx].groupId, photoPosition: photoPosition !== undefined ? photoPosition : (leaders[idx].photoPosition || '50% 50%'), photoScale: photoScale !== undefined ? Number(photoScale) : (leaders[idx].photoScale || 1), email: email !== undefined ? String(email).trim().toLowerCase() : (leaders[idx].email || '') };
     await saveAppData(supabase, { ...appData, leaders });
     await writeAuditLog(supabase, c, user.id, 'update_leader', 'leader', id, { fields: Object.keys({ name, description, photo, groupId, photoPosition, photoScale }).filter(k => ( { name, description, photo, groupId, photoPosition, photoScale } as any)[k] !== undefined) });
     const hydrated = { ...leaders[idx], photo: await signLeaderMediaValue(supabase, leaders[idx].photo) };
@@ -734,11 +737,14 @@ app.post('/api/groups', authenticateUser, async (c) => {
       return c.json({ error: 'Forbidden - Insufficient permissions' }, 403);
     }
     const supabase = createSupabaseClient(c.env);
-    const { title, description, photo } = await readJson(c);
+    const { title, description, photo, governorate, managerEmail } = await readJson(c);
     if (!validLibraryText(title, 200) || !validLibraryText(description, 5000)) return c.json({ error: 'Invalid title or description' }, 400);
+    if (governorate !== undefined && governorate !== '' && !isValidGovernorate(governorate)) return c.json({ error: 'Invalid governorate', code: 'invalid_governorate' }, 400);
+    if (managerEmail !== undefined && managerEmail !== '' && !isValidLeaderEmail(managerEmail)) return c.json({ error: 'Manager email must be a valid Gmail', code: 'invalid_manager_email' }, 400);
     const appData = await getAppData(supabase);
-    const newGroup = { id: `group-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`, title, description, photo: photo || '' };
+    const newGroup = { id: `group-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`, title, description, photo: photo || '', governorate: governorate || '', managerEmail: typeof managerEmail === 'string' ? managerEmail.trim().toLowerCase() : '' };
     await saveAppData(supabase, { ...appData, groups: [...(appData.groups || []), newGroup] });
+    await writeAuditLog(supabase, c, user.id, 'create_group', 'group', newGroup.id, { title, governorate, managerEmail });
     return c.json(newGroup, 201);
   } catch {
     return c.json({ error: 'Failed to add group' }, 500);
@@ -748,17 +754,22 @@ app.post('/api/groups', authenticateUser, async (c) => {
 app.put('/api/groups/:id', authenticateUser, async (c) => {
   try {
     const user = c.get('user');
-    if (user.role !== 'super_admin' && !user.permissions?.includes('edit_groups')) {
-      return c.json({ error: 'Forbidden - Insufficient permissions' }, 403);
-    }
     const supabase = createSupabaseClient(c.env);
     const { id } = c.req.param();
-    const { title, description, photo } = await readJson(c);
+    const { title, description, photo, governorate, managerEmail } = await readJson(c);
     const appData = await getAppData(supabase);
     const groups = appData.groups || [];
     const idx = groups.findIndex((g: any) => g.id === id);
     if (idx === -1) return c.json({ error: 'Group not found' }, 404);
-    groups[idx] = { ...groups[idx], title: title || groups[idx].title, description: description !== undefined ? description : groups[idx].description, photo: photo !== undefined ? photo : groups[idx].photo };
+    const existing = groups[idx];
+    const isAdmin = user.role === 'super_admin' || user.permissions?.includes('edit_groups');
+    const isManager = canManageGroupMap(user, existing);
+    if (!isAdmin && !isManager) return c.json({ error: 'Forbidden - Insufficient permissions' }, 403);
+    // Only admin can change managerEmail, manager can change governorate
+    if (managerEmail !== undefined && !isAdmin) return c.json({ error: 'Only admin can change manager', code: 'forbidden' }, 403);
+    if (governorate !== undefined && governorate !== '' && !isValidGovernorate(governorate)) return c.json({ error: 'Invalid governorate', code: 'invalid_governorate' }, 400);
+    if (managerEmail !== undefined && managerEmail !== '' && !isValidLeaderEmail(managerEmail)) return c.json({ error: 'Manager email must be Gmail', code: 'invalid_manager_email' }, 400);
+    groups[idx] = { ...groups[idx], title: title !== undefined ? title : groups[idx].title, description: description !== undefined ? description : groups[idx].description, photo: photo !== undefined ? photo : groups[idx].photo, governorate: governorate !== undefined ? governorate : (groups[idx].governorate || ''), managerEmail: managerEmail !== undefined ? managerEmail.trim().toLowerCase() : (groups[idx].managerEmail || '') };
     await saveAppData(supabase, { ...appData, groups });
     return c.json(groups[idx]);
   } catch {
@@ -776,9 +787,71 @@ app.delete('/api/groups/:id', authenticateUser, async (c) => {
     const { id } = c.req.param();
     const appData = await getAppData(supabase);
     await saveAppData(supabase, { ...appData, groups: (appData.groups || []).filter((g: any) => g.id !== id) });
+    await supabase.from('group_churches').delete().eq('group_id', id);
+    await writeAuditLog(supabase, c, user.id, 'delete_group', 'group', id);
     return c.json({ success: true });
   } catch {
     return c.json({ error: 'Failed to delete group' }, 500);
+  }
+});
+
+// Churches & Map routes (safest - RLS + manager check)
+app.get('/api/churches', authenticateUser, async (c) => {
+  try {
+    const governorate = c.req.query('governorate');
+    if (!governorate || !isValidGovernorate(governorate)) return c.json({ error: 'Invalid governorate' }, 400);
+    const supabase = createSupabaseClient(c.env);
+    const { data, error } = await supabase.from('churches').select('*').eq('governorate', governorate).order('name');
+    if (error) throw error;
+    return c.json(data || []);
+  } catch {
+    return c.json({ error: 'Failed to load churches' }, 500);
+  }
+});
+
+app.get('/api/groups/:id/map', authenticateUser, async (c) => {
+  try {
+    const user = c.get('user');
+    const supabase = createSupabaseClient(c.env);
+    const { id } = c.req.param();
+    const appData = await getAppData(supabase);
+    const group = (appData.groups || []).find((g: any) => g.id === id);
+    if (!group) return c.json({ error: 'Group not found' }, 404);
+    const governorate = group.governorate;
+    if (!governorate || !isValidGovernorate(governorate)) return c.json({ churches: [], statuses: {}, counters: { total: 0, working: 0, notWorking: 0 }, canEdit: false, governorate: '' });
+    const { data: churches } = await supabase.from('churches').select('*').eq('governorate', governorate).order('name');
+    const { data: statuses } = await supabase.from('group_churches').select('church_id,status').eq('group_id', id);
+    const statusMap: Record<string, string> = {};
+    (statuses || []).forEach((s: any) => statusMap[s.church_id] = s.status);
+    const total = (churches || []).length;
+    const working = Object.values(statusMap).filter(v => v === 'working').length;
+    const canEdit = canManageGroupMap(user, group);
+    return c.json({ governorate, churches: churches || [], statuses: statusMap, counters: { total, working, notWorking: total - working }, canEdit });
+  } catch {
+    return c.json({ error: 'Failed to load map' }, 500);
+  }
+});
+
+app.put('/api/groups/:id/map/church/:churchId', authenticateUser, async (c) => {
+  try {
+    const user = c.get('user');
+    const supabase = createSupabaseClient(c.env);
+    const { id, churchId } = c.req.param();
+    const appData = await getAppData(supabase);
+    const group = (appData.groups || []).find((g: any) => g.id === id);
+    if (!group) return c.json({ error: 'Group not found' }, 404);
+    if (!canManageGroupMap(user, group)) return c.json({ error: 'Forbidden - Only group manager or admin can edit', code: 'forbidden' }, 403);
+    const { data: church } = await supabase.from('churches').select('governorate').eq('id', churchId).maybeSingle();
+    if (!church) return c.json({ error: 'Church not found' }, 404);
+    if (church.governorate !== group.governorate) return c.json({ error: 'Church not in group governorate', code: 'invalid_governorate' }, 400);
+    const { data: existing } = await supabase.from('group_churches').select('status').eq('group_id', id).eq('church_id', churchId).maybeSingle();
+    const newStatus = existing?.status === 'working' ? 'not_working' : 'working';
+    const { error } = await supabase.from('group_churches').upsert({ group_id: id, church_id: churchId, status: newStatus, updated_by: user.id, updated_at: new Date().toISOString() }, { onConflict: 'group_id,church_id' });
+    if (error) throw error;
+    await writeAuditLog(supabase, c, user.id, 'toggle_church_status', 'group_church', churchId, { group_id: id, new_status: newStatus });
+    return c.json({ churchId, status: newStatus });
+  } catch (e: any) {
+    return c.json({ error: e.message || 'Failed to toggle church' }, 500);
   }
 });
 
@@ -978,6 +1051,26 @@ function validLeaderPhotoScale(value: unknown): boolean {
   if (value === undefined || value === null || value === '') return true;
   const n = typeof value === 'string' ? parseFloat(value) : typeof value === 'number' ? value : NaN;
   return Number.isFinite(n) && n >= 0.5 && n <= 3;
+}
+
+const EGYPT_GOVERNORATES = ['القاهرة','الجيزة','الإسكندرية','الدقهلية','البحر الأحمر','البحيرة','الفيوم','الغربية','الإسماعيلية','المنوفية','المنيا','القليوبية','الوادي الجديد','السويس','أسوان','أسيوط','بني سويف','بورسعيد','دمياط','الشرقية','جنوب سيناء','كفر الشيخ','مطروح','الأقصر','قنا','شمال سيناء','سوهاج'] as const;
+
+function isValidGovernorate(value: unknown): boolean {
+  return typeof value === 'string' && (EGYPT_GOVERNORATES as readonly string[]).includes(value);
+}
+
+function isValidLeaderEmail(value: unknown): boolean {
+  if (value === undefined || value === null || value === '') return true;
+  return typeof value === 'string' && value.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value) && value.toLowerCase().endsWith('@gmail.com');
+}
+
+function canManageGroupMap(user: any, group: any): boolean {
+  if (!user || !group) return false;
+  if (user.role === 'super_admin') return true;
+  if (user.permissions?.includes('edit_groups')) return true;
+  const managerEmail = typeof group.managerEmail === 'string' ? group.managerEmail.trim().toLowerCase() : '';
+  const userEmail = typeof user.email === 'string' ? user.email.trim().toLowerCase() : '';
+  return !!managerEmail && !!userEmail && managerEmail === userEmail;
 }
 
 function isValidLeaderPhoto(value: unknown, isLegacyBase64Allowed = true): boolean {

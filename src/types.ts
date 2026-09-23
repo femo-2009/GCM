@@ -50,6 +50,7 @@ export interface Leader {
   groupId: string; // group this leader belongs to
   photoPosition?: string; // CSS object-position for slider preview (e.g. "center", "50% 30%") - WhatsApp-style drag position
   photoScale?: number; // WhatsApp-style zoom 0.5..3 (تصغير + تكبير)
+  email?: string; // gmail for group manager assignment (safest: validated email)
 }
 
 export interface Group {
