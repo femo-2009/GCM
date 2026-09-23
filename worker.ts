@@ -821,6 +821,10 @@ app.post('/api/churches/sync', authenticateUser, async (c) => {
     const { data: existing } = await supabase.from('churches').select('id').eq('governorate', governorate).limit(1);
     // If already has data, don't re-fetch unless forced
     const real = await fetchRealChurchesFromOverpass(governorate);
+    if (real.length === 0) {
+      const { data: existingChurches } = await supabase.from('churches').select('id').eq('governorate', governorate);
+      return c.json({ governorate, fetched: 0, inserted: 0, existing: existingChurches?.length || 0, message: 'No extra real churches found in OSM for this governorate - showing seeded data' });
+    }
     let inserted = 0;
     for (const ch of real) {
       const { data: dup } = await supabase.from('churches').select('id').eq('governorate', governorate).eq('name', ch.name).limit(1).maybeSingle();
@@ -832,6 +836,31 @@ app.post('/api/churches/sync', authenticateUser, async (c) => {
     return c.json({ governorate, fetched: real.length, inserted });
   } catch (e: any) {
     return c.json({ error: e.message || 'Failed to sync churches' }, 500);
+  }
+});
+
+app.post('/api/churches/sync-all', authenticateUser, async (c) => {
+  try {
+    const user = c.get('user');
+    if (user.role !== 'super_admin' && !user.permissions?.includes('edit_groups')) return c.json({ error: 'Forbidden' }, 403);
+    const supabase = createSupabaseClient(c.env);
+    let totalFetched = 0, totalInserted = 0;
+    for (const gov of EGYPT_GOVERNORATES) {
+      try {
+        const real = await fetchRealChurchesFromOverpass(gov);
+        totalFetched += real.length;
+        for (const ch of real) {
+          const { data: dup } = await supabase.from('churches').select('id').eq('governorate', gov).eq('name', ch.name).limit(1).maybeSingle();
+          if (dup) continue;
+          const { error } = await supabase.from('churches').insert({ name: ch.name, governorate: gov, lat: ch.lat, lng: ch.lng, address: ch.address });
+          if (!error) totalInserted++;
+        }
+      } catch {}
+    }
+    await writeAuditLog(supabase, c, user.id, 'sync_all_churches', 'church', 'all', { totalFetched, totalInserted });
+    return c.json({ totalFetched, totalInserted });
+  } catch (e: any) {
+    return c.json({ error: e.message || 'Failed sync all' }, 500);
   }
 });
 
@@ -1136,8 +1165,8 @@ async function fetchRealChurchesFromOverpass(governorate: string): Promise<Array
   const bbox = GOV_BBOX[governorate];
   if (!bbox) return [];
   const [ south, west, north, east ] = bbox;
-  // Fix 406: use POST with form-encoded, broader query (all place_of_worship + building=church, then filter), limit 100
-  const query = `[out:json][timeout:25];(node["amenity"="place_of_worship"](${south},${west},${north},${east});way["amenity"="place_of_worship"](${south},${west},${north},${east});node["building"="church"](${south},${west},${north},${east});way["building"="church"](${south},${west},${north},${east}););out center 100;`;
+  // All real churches like Google Maps - no 100 limit, fetch all
+  const query = `[out:json][timeout:60];(nwr["amenity"="place_of_worship"](${south},${west},${north},${east});nwr["building"="church"](${south},${west},${north},${east});nwr["name"~"كنيسة|كنيسه|Church|church|ⲉⲕⲕⲗⲏⲥⲓⲁ"](${south},${west},${north},${east}););out center;`;
   const endpoints = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
   for (const endpoint of endpoints) {
     try {
@@ -1151,20 +1180,16 @@ async function fetchRealChurchesFromOverpass(governorate: string): Promise<Array
         throw new Error(`Overpass ${endpoint} failed ${res.status} ${txt.slice(0,200)}`);
       }
       const json: any = await res.json();
-      const elements = Array.isArray(json.elements) ? json.elements.slice(0, 100) : [];
+      const elements = Array.isArray(json.elements) ? json.elements : [];
       const churches = elements.map((el: any) => {
         const lat = typeof el.lat === 'number' ? el.lat : el.center?.lat;
         const lng = typeof el.lon === 'number' ? el.lon : el.center?.lon;
         if (typeof lat !== 'number' || typeof lng !== 'number') return null;
-        // filter to likely Christian churches (if tag religion exists and not christian, skip)
-        const religion = el.tags?.religion;
-        if (religion && religion !== 'christian' && religion !== 'مسلم' && religion !== 'christian') {
-          // keep only christian or no religion (many churches missing religion tag)
-          if (religion !== 'christian') return null;
-        }
-        const name = typeof el.tags?.name === 'string' && el.tags.name.trim() ? el.tags.name.trim().slice(0, 200) : (typeof el.tags?.['name:ar'] === 'string' ? el.tags['name:ar'].trim().slice(0,200) : (typeof el.tags?.['name:en'] === 'string' ? el.tags['name:en'].trim().slice(0,200) : 'كنيسة'));
-        if (!name || name === 'كنيسة' && !el.tags?.amenity && !el.tags?.building) return null;
-        const address = typeof el.tags?.['addr:full'] === 'string' ? el.tags['addr:full'].slice(0,500) : (typeof el.tags?.addr === 'string' ? el.tags.addr.slice(0,500) : '');
+        const tags = el.tags || {};
+        const nameRaw = tags.name || tags['name:ar'] || tags['name:en'] || tags['name:ar:EG'] || '';
+        const name = typeof nameRaw === 'string' && nameRaw.trim() ? nameRaw.trim().slice(0, 200) : 'كنيسة';
+        if (name === 'كنيسة' && !tags.amenity && !tags.building && !tags.name) return null;
+        const address = typeof tags['addr:full'] === 'string' ? tags['addr:full'].slice(0,500) : (typeof tags.addr === 'string' ? tags.addr.slice(0,500) : '');
         return { name, lat, lng, address };
       }).filter(Boolean) as any;
       if (churches.length > 0) return churches;
