@@ -371,7 +371,7 @@ export default function GroupsView({ lang, user, groups, setGroups, onNavigate }
     if (!mapGroup) return;
     const gov = (mapGroup as any).governorate;
     if (!gov) return;
-    if (!confirm(lang === 'ar' ? `جلب الكنائس الحقيقية لمحافظة ${gov} من خرائط Google/OSM؟` : `Fetch real churches for ${gov} from Google Maps/OSM?`)) return;
+    if (!confirm(lang === 'ar' ? `جلب الكنائس المتاحة لمحافظة ${gov} من OpenStreetMap؟` : `Fetch available churches for ${gov} from OpenStreetMap?`)) return;
     setMapLoading(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -793,7 +793,7 @@ export default function GroupsView({ lang, user, groups, setGroups, onNavigate }
 
               <div className="pr-8">
                 <h3 className="text-lg font-extrabold text-slate-900 flex items-center gap-2"><MapIcon className="w-5 h-5 text-emerald-600" /> {mapGroup.title} — {(mapGroup as any).governorate}</h3>
-                <p className="text-xs text-slate-500">{lang === 'ar' ? 'الكنائس من خرائط Google / OSM' : 'Churches from Google Maps / OSM'}</p>
+                <p className="text-xs text-slate-500">{lang === 'ar' ? 'مصدر بيانات الكنائس: OpenStreetMap' : 'Church data source: OpenStreetMap'}</p>
               </div>
 
               {/* 3 counters */}
@@ -825,13 +825,13 @@ export default function GroupsView({ lang, user, groups, setGroups, onNavigate }
                   <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 gap-2 p-6 text-center">
                     <MapIcon className="w-10 h-10" />
                     <p className="text-sm">{lang === 'ar' ? 'لا توجد كنائس في هذه المحافظة بعد' : 'No churches in this governorate yet'}</p>
-                    <p className="text-xs">{lang === 'ar' ? 'سيتم إضافة الكنائس من Google Maps قريباً' : 'Churches will be added from Google Maps soon'}</p>
+                    <p className="text-xs">{lang === 'ar' ? 'بيانات الخريطة مأخوذة من OpenStreetMap' : 'Map data is sourced from OpenStreetMap'}</p>
                   </div>
                 ) : (
                   // @ts-ignore - react-leaflet types
                   <MapContainer key={`${mapGroup?.id}-${mapChurches.length}-${mapCounters.total}`} center={mapChurches.length ? [mapChurches[0].lat, mapChurches[0].lng] as any : [30.05, 31.23] as any} zoom={11} style={{ height: '100%', width: '100%' } as any} scrollWheelZoom={true as any} whenReady={(map: any) => setTimeout(() => map.target.invalidateSize(), 100)}>
                     {/* @ts-ignore */}
-                    <TileLayer attribution='&copy; OpenStreetMap' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                    <TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
                     {mapChurches.map((church: any) => {
                       const isWorking = mapStatuses[church.id] === 'working';
                       return (
