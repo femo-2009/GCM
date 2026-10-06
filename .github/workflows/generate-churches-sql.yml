@@ -1,0 +1,49 @@
+name: Generate church import SQL
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  generate-churches-sql:
+    name: Fetch OSM churches and prepare SQL
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Run the church importer
+        id: importer
+        continue-on-error: true
+        run: node scripts/gcm-churches-all.cjs
+
+      - name: Upload generated SQL file
+        if: ${{ always() && hashFiles('churches-full.sql') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: churches-full-sql
+          path: churches-full.sql
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Validate generated SQL file
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          if [ ! -s churches-full.sql ]; then
+            echo '::error::The importer did not create churches-full.sql. Check the importer log and run the workflow again.'
+            exit 1
+          fi
+          if grep -q '^-- WARNING: PARTIAL DATA' churches-full.sql; then
+            echo '::error::Some governorates failed. The SQL artifact was uploaded, but do not import it as a complete list. Run the workflow again later.'
+            exit 1
+          fi
+          echo 'The importer reports that all governorate queries completed.'
