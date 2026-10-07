@@ -737,14 +737,12 @@ app.post('/api/groups', authenticateUser, async (c) => {
       return c.json({ error: 'Forbidden - Insufficient permissions' }, 403);
     }
     const supabase = createSupabaseClient(c.env);
-    const { title, description, photo, governorate, managerEmail } = await readJson(c);
+    const { title, description, photo } = await readJson(c);
     if (!validLibraryText(title, 200) || !validLibraryText(description, 5000)) return c.json({ error: 'Invalid title or description' }, 400);
-    if (governorate !== undefined && governorate !== '' && !isValidGovernorate(governorate)) return c.json({ error: 'Invalid governorate', code: 'invalid_governorate' }, 400);
-    if (managerEmail !== undefined && managerEmail !== '' && !isValidLeaderEmail(managerEmail)) return c.json({ error: 'Manager email must be a valid Gmail', code: 'invalid_manager_email' }, 400);
     const appData = await getAppData(supabase);
-    const newGroup = { id: `group-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`, title, description, photo: photo || '', governorate: governorate || '', managerEmail: typeof managerEmail === 'string' ? managerEmail.trim().toLowerCase() : '' };
+    const newGroup = { id: `group-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`, title, description, photo: photo || '' };
     await saveAppData(supabase, { ...appData, groups: [...(appData.groups || []), newGroup] });
-    await writeAuditLog(supabase, c, user.id, 'create_group', 'group', newGroup.id, { title, governorate, managerEmail });
+    await writeAuditLog(supabase, c, user.id, 'create_group', 'group', newGroup.id, { title });
     return c.json(newGroup, 201);
   } catch {
     return c.json({ error: 'Failed to add group' }, 500);
@@ -756,20 +754,15 @@ app.put('/api/groups/:id', authenticateUser, async (c) => {
     const user = c.get('user');
     const supabase = createSupabaseClient(c.env);
     const { id } = c.req.param();
-    const { title, description, photo, governorate, managerEmail } = await readJson(c);
+    const { title, description, photo } = await readJson(c);
     const appData = await getAppData(supabase);
     const groups = appData.groups || [];
     const idx = groups.findIndex((g: any) => g.id === id);
     if (idx === -1) return c.json({ error: 'Group not found' }, 404);
     const existing = groups[idx];
     const isAdmin = user.role === 'super_admin' || user.permissions?.includes('edit_groups');
-    const isManager = canManageGroupMap(user, existing);
-    if (!isAdmin && !isManager) return c.json({ error: 'Forbidden - Insufficient permissions' }, 403);
-    // Only admin can change managerEmail, manager can change governorate
-    if (managerEmail !== undefined && !isAdmin) return c.json({ error: 'Only admin can change manager', code: 'forbidden' }, 403);
-    if (governorate !== undefined && governorate !== '' && !isValidGovernorate(governorate)) return c.json({ error: 'Invalid governorate', code: 'invalid_governorate' }, 400);
-    if (managerEmail !== undefined && managerEmail !== '' && !isValidLeaderEmail(managerEmail)) return c.json({ error: 'Manager email must be Gmail', code: 'invalid_manager_email' }, 400);
-    groups[idx] = { ...groups[idx], title: title !== undefined ? title : groups[idx].title, description: description !== undefined ? description : groups[idx].description, photo: photo !== undefined ? photo : groups[idx].photo, governorate: governorate !== undefined ? governorate : (groups[idx].governorate || ''), managerEmail: managerEmail !== undefined ? managerEmail.trim().toLowerCase() : (groups[idx].managerEmail || '') };
+    if (!isAdmin) return c.json({ error: 'Forbidden - Insufficient permissions' }, 403);
+    groups[idx] = { ...groups[idx], title: title !== undefined ? title : groups[idx].title, description: description !== undefined ? description : groups[idx].description, photo: photo !== undefined ? photo : groups[idx].photo };
     await saveAppData(supabase, { ...appData, groups });
     return c.json(groups[idx]);
   } catch {
@@ -787,164 +780,10 @@ app.delete('/api/groups/:id', authenticateUser, async (c) => {
     const { id } = c.req.param();
     const appData = await getAppData(supabase);
     await saveAppData(supabase, { ...appData, groups: (appData.groups || []).filter((g: any) => g.id !== id) });
-    await supabase.from('group_churches').delete().eq('group_id', id);
     await writeAuditLog(supabase, c, user.id, 'delete_group', 'group', id);
     return c.json({ success: true });
   } catch {
     return c.json({ error: 'Failed to delete group' }, 500);
-  }
-});
-
-// Churches & Map routes (safest - RLS + manager check)
-app.get('/api/churches', authenticateUser, async (c) => {
-  try {
-    const governorate = c.req.query('governorate');
-    if (!governorate || !isValidGovernorate(governorate)) return c.json({ error: 'Invalid governorate' }, 400);
-    const supabase = createSupabaseClient(c.env);
-    const { data, error } = await supabase.from('churches').select('*').eq('governorate', governorate).order('name');
-    if (error) throw error;
-    return c.json(data || []);
-  } catch {
-    return c.json({ error: 'Failed to load churches' }, 500);
-  }
-});
-
-app.get('/api/churches/stats', authenticateUser, async (c) => {
-  try {
-    const supabase = createSupabaseClient(c.env);
-    const { data, error } = await supabase.from('churches').select('governorate');
-    if (error) throw error;
-    const counts: Record<string, number> = {};
-    for (const g of EGYPT_GOVERNORATES) counts[g] = 0;
-    (data || []).forEach((row: any) => { if (counts[row.governorate] !== undefined) counts[row.governorate]++; });
-    const table = EGYPT_GOVERNORATES.map(g => ({ governorate: g, count: counts[g] }));
-    return c.json(table);
-  } catch {
-    return c.json({ error: 'Failed to load stats' }, 500);
-  }
-});
-
-app.post('/api/churches', authenticateUser, async (c) => {
-  try {
-    const user = c.get('user');
-    if (user.role !== 'super_admin' && !user.permissions?.includes('edit_groups')) return c.json({ error: 'Forbidden - Only admin can add churches' }, 403);
-    const { name, governorate, lat, lng, address } = await readJson(c);
-    if (!validLeaderText(name, 200, true)) return c.json({ error: 'Invalid church name' }, 400);
-    if (!isValidGovernorate(governorate)) return c.json({ error: 'Invalid governorate' }, 400);
-    if (typeof lat !== 'number' || typeof lng !== 'number' || lat < -90 || lat > 90 || lng < -180 || lng > 180) return c.json({ error: 'Invalid coordinates' }, 400);
-    const supabase = createSupabaseClient(c.env);
-    const { data, error } = await supabase.from('churches').insert({ name: name.trim(), governorate, lat, lng, address: (address || '').slice(0, 500) }).select().single();
-    if (error) throw error;
-    await writeAuditLog(supabase, c, user.id, 'create_church', 'church', data.id, { name, governorate });
-    return c.json(data, 201);
-  } catch (e: any) {
-    return c.json({ error: e.message || 'Failed to add church' }, 500);
-  }
-});
-
-app.post('/api/churches/sync', authenticateUser, async (c) => {
-  try {
-    const user = c.get('user');
-    if (user.role !== 'super_admin' && !user.permissions?.includes('edit_groups') && !canManageGroupMap(user, { managerEmail: user.email })) {
-      // allow any manager of any group to sync their governorate, but check via body
-    }
-    const { governorate } = await readJson(c);
-    if (!isValidGovernorate(governorate)) return c.json({ error: 'Invalid governorate' }, 400);
-    const supabase = createSupabaseClient(c.env);
-    const { data: existing } = await supabase.from('churches').select('id').eq('governorate', governorate).limit(1);
-    // If already has data, don't re-fetch unless forced
-    const real = await fetchRealChurchesFromOverpass(governorate);
-    if (real.length === 0) {
-      const { data: existingChurches } = await supabase.from('churches').select('id').eq('governorate', governorate);
-      return c.json({ governorate, fetched: 0, inserted: 0, existing: existingChurches?.length || 0, message: 'No extra real churches found in OSM for this governorate - showing seeded data' });
-    }
-    const inserted = await insertRealChurches(supabase, governorate, real);
-    await writeAuditLog(supabase, c, user.id, 'sync_churches', 'church', governorate, { fetched: real.length, inserted });
-    return c.json({ governorate, fetched: real.length, inserted });
-  } catch (e: any) {
-    return c.json({ error: e.message || 'Failed to sync churches' }, 500);
-  }
-});
-
-app.post('/api/churches/sync-all', authenticateUser, async (c) => {
-  try {
-    const user = c.get('user');
-    if (user.role !== 'super_admin' && !user.permissions?.includes('edit_groups')) return c.json({ error: 'Forbidden' }, 403);
-    const supabase = createSupabaseClient(c.env);
-    let totalFetched = 0, totalInserted = 0;
-    for (const gov of EGYPT_GOVERNORATES) {
-      try {
-        const real = await fetchRealChurchesFromOverpass(gov);
-        totalFetched += real.length;
-        totalInserted += await insertRealChurches(supabase, gov, real);
-      } catch {}
-    }
-    await writeAuditLog(supabase, c, user.id, 'sync_all_churches', 'church', 'all', { totalFetched, totalInserted });
-    return c.json({ totalFetched, totalInserted });
-  } catch (e: any) {
-    return c.json({ error: e.message || 'Failed sync all' }, 500);
-  }
-});
-
-app.get('/api/groups/:id/map', authenticateUser, async (c) => {
-  try {
-    const user = c.get('user');
-    const supabase = createSupabaseClient(c.env);
-    const { id } = c.req.param();
-    const appData = await getAppData(supabase);
-    const group = (appData.groups || []).find((g: any) => g.id === id);
-    if (!group) return c.json({ error: 'Group not found' }, 404);
-    const governorate = group.governorate;
-    if (!governorate || !isValidGovernorate(governorate)) return c.json({ churches: [], statuses: {}, counters: { total: 0, working: 0, notWorking: 0 }, canEdit: false, governorate: '' });
-    // Fast: return existing churches instantly, then auto-fetch real churches in background if needed (no manual button)
-    const { data: churches } = await supabase.from('churches').select('*').eq('governorate', governorate).order('name');
-    // Auto-sync real Google Maps churches in background if less than 5 (so map shows all without manual)
-    if (churches && churches.length < 5) {
-      const bgFetch = (async () => {
-        try {
-          const real = await fetchRealChurchesFromOverpass(governorate);
-          for (const ch of real) {
-            const { data: dup } = await supabase.from('churches').select('id').eq('governorate', governorate).eq('name', ch.name).limit(1).maybeSingle();
-            if (dup) continue;
-            await supabase.from('churches').insert({ name: ch.name, governorate, lat: ch.lat, lng: ch.lng, address: ch.address });
-          }
-        } catch {}
-      })();
-      try { (c.executionCtx as any)?.waitUntil?.(bgFetch); } catch {}
-    }
-    const { data: statuses } = await supabase.from('group_churches').select('church_id,status').eq('group_id', id);
-    const statusMap: Record<string, string> = {};
-    (statuses || []).forEach((s: any) => statusMap[s.church_id] = s.status);
-    const total = (churches || []).length;
-    const working = Object.values(statusMap).filter(v => v === 'working').length;
-    const canEdit = canManageGroupMap(user, group);
-    c.header('Cache-Control', 'private, max-age=30');
-    return c.json({ governorate, churches: churches || [], statuses: statusMap, counters: { total, working, notWorking: total - working }, canEdit });
-  } catch {
-    return c.json({ error: 'Failed to load map' }, 500);
-  }
-});
-
-app.put('/api/groups/:id/map/church/:churchId', authenticateUser, async (c) => {
-  try {
-    const user = c.get('user');
-    const supabase = createSupabaseClient(c.env);
-    const { id, churchId } = c.req.param();
-    const appData = await getAppData(supabase);
-    const group = (appData.groups || []).find((g: any) => g.id === id);
-    if (!group) return c.json({ error: 'Group not found' }, 404);
-    if (!canManageGroupMap(user, group)) return c.json({ error: 'Forbidden - Only group manager or admin can edit', code: 'forbidden' }, 403);
-    const { data: church } = await supabase.from('churches').select('governorate').eq('id', churchId).maybeSingle();
-    if (!church) return c.json({ error: 'Church not found' }, 404);
-    if (church.governorate !== group.governorate) return c.json({ error: 'Church not in group governorate', code: 'invalid_governorate' }, 400);
-    const { data: existing } = await supabase.from('group_churches').select('status').eq('group_id', id).eq('church_id', churchId).maybeSingle();
-    const newStatus = existing?.status === 'working' ? 'not_working' : 'working';
-    const { error } = await supabase.from('group_churches').upsert({ group_id: id, church_id: churchId, status: newStatus, updated_by: user.id, updated_at: new Date().toISOString() }, { onConflict: 'group_id,church_id' });
-    if (error) throw error;
-    await writeAuditLog(supabase, c, user.id, 'toggle_church_status', 'group_church', churchId, { group_id: id, new_status: newStatus });
-    return c.json({ churchId, status: newStatus });
-  } catch (e: any) {
-    return c.json({ error: e.message || 'Failed to toggle church' }, 500);
   }
 });
 
@@ -1146,137 +985,9 @@ function validLeaderPhotoScale(value: unknown): boolean {
   return Number.isFinite(n) && n >= 0.5 && n <= 3;
 }
 
-const EGYPT_GOVERNORATES = ['القاهرة','الجيزة','الإسكندرية','الدقهلية','البحر الأحمر','البحيرة','الفيوم','الغربية','الإسماعيلية','المنوفية','المنيا','القليوبية','الوادي الجديد','السويس','أسوان','أسيوط','بني سويف','بورسعيد','دمياط','الشرقية','جنوب سيناء','كفر الشيخ','مطروح','الأقصر','قنا','شمال سيناء','سوهاج'] as const;
-
-function isValidGovernorate(value: unknown): boolean {
-  return typeof value === 'string' && (EGYPT_GOVERNORATES as readonly string[]).includes(value);
-}
-
 function isValidLeaderEmail(value: unknown): boolean {
   if (value === undefined || value === null || value === '') return true;
   return typeof value === 'string' && value.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value) && value.toLowerCase().endsWith('@gmail.com');
-}
-
-function canManageGroupMap(user: any, group: any): boolean {
-  if (!user || !group) return false;
-  if (user.role === 'super_admin') return true;
-  if (user.permissions?.includes('edit_groups')) return true;
-  const managerEmail = typeof group.managerEmail === 'string' ? group.managerEmail.trim().toLowerCase() : '';
-  const userEmail = typeof user.email === 'string' ? user.email.trim().toLowerCase() : '';
-  return !!managerEmail && !!userEmail && managerEmail === userEmail;
-}
-
-// Real churches - ALL per governorate like Google Maps (no limit)
-const GOV_EN: Record<string, string> = {
-  'القاهرة': 'Cairo', 'الجيزة': 'Giza', 'الإسكندرية': 'Alexandria', 'الدقهلية': 'Dakahlia',
-  'البحر الأحمر': 'Red Sea', 'البحيرة': 'Beheira', 'الفيوم': 'Faiyum', 'الغربية': 'Gharbia',
-  'الإسماعيلية': 'Ismailia', 'المنوفية': 'Monufia', 'المنيا': 'Minya', 'القليوبية': 'Qalyubia',
-  'الوادي الجديد': 'New Valley', 'السويس': 'Suez', 'أسوان': 'Aswan', 'أسيوط': 'Asyut',
-  'بني سويف': 'Beni Suef', 'بورسعيد': 'Port Said', 'دمياط': 'Damietta', 'الشرقية': 'Sharqia',
-  'جنوب سيناء': 'South Sinai', 'كفر الشيخ': 'Kafr el-Sheikh', 'مطروح': 'Matrouh',
-  'الأقصر': 'Luxor', 'قنا': 'Qena', 'شمال سيناء': 'North Sinai', 'سوهاج': 'Sohag'
-};
-const GOV_BBOX: Record<string, [number, number, number, number]> = {
-  'القاهرة': [29.85, 31.00, 30.25, 31.70],
-  'الجيزة': [29.50, 30.80, 30.30, 31.40],
-  'الإسكندرية': [30.90, 29.60, 31.40, 30.20],
-  'الدقهلية': [30.80, 31.20, 31.40, 31.90],
-  'البحر الأحمر': [22.00, 32.50, 28.00, 34.50],
-  'البحيرة': [30.20, 29.80, 31.30, 30.80],
-  'الفيوم': [29.00, 30.40, 29.80, 31.00],
-  'الغربية': [30.60, 30.70, 31.20, 31.30],
-  'الإسماعيلية': [30.30, 32.00, 30.80, 32.50],
-  'المنوفية': [30.20, 30.70, 30.80, 31.20],
-  'المنيا': [27.80, 30.40, 28.80, 31.00],
-  'القليوبية': [30.00, 31.00, 30.40, 31.40],
-  'الوادي الجديد': [22.00, 27.00, 26.00, 31.00],
-  'السويس': [29.70, 32.20, 30.20, 32.70],
-  'أسوان': [23.50, 32.40, 24.50, 33.20],
-  'أسيوط': [26.80, 30.80, 27.80, 31.50],
-  'بني سويف': [28.80, 30.80, 29.60, 31.30],
-  'بورسعيد': [31.10, 32.10, 31.40, 32.40],
-  'دمياط': [31.20, 31.50, 31.60, 31.90],
-  'الشرقية': [30.30, 31.20, 30.90, 32.00],
-  'جنوب سيناء': [27.50, 33.00, 29.50, 34.80],
-  'كفر الشيخ': [31.00, 30.70, 31.60, 31.30],
-  'مطروح': [29.50, 25.00, 31.50, 29.00],
-  'الأقصر': [25.30, 32.30, 26.00, 32.80],
-  'قنا': [25.80, 32.20, 26.50, 32.80],
-  'شمال سيناء': [30.50, 32.50, 31.30, 34.00],
-  'سوهاج': [26.00, 31.30, 27.00, 32.00],
-};
-
-const MOSQUE_LIKE = /مسجد|mosque|جامع|مصلى|زاوية|جمعية|charity|جمعيه|معهد|مدرسة|مستشفى|hospital|school/i;
-
-async function fetchRealChurchesFromOverpass(governorate: string): Promise<Array<{ name: string; lat: number; lng: number; address: string }>> {
-  const en = GOV_EN[governorate] || governorate;
-  const bbox = GOV_BBOX[governorate];
-  if (!bbox) return [];
-  const [ south, west, north, east ] = bbox;
-  // MAXIMALLY broad: religion!=muslim catches ALL Christian denominations (Coptic/Orthodox/Catholic/Evangelical...),
-  // building=church catches those without amenity, denomination catches those without religion tag.
-  const areaQuery = `[out:json][timeout:60];area["name"="${en}"]["admin_level"~"4|5"]->.a;(nwr["amenity"="place_of_worship"]["religion"!="muslim"](area.a);nwr["building"="church"](area.a);nwr["amenity"="place_of_worship"]["denomination"](area.a););out center;`;
-  const bboxQuery = `[out:json][timeout:60];(nwr["amenity"="place_of_worship"]["religion"!="muslim"](${south},${west},${north},${east});nwr["building"="church"](${south},${west},${north},${east});nwr["amenity"="place_of_worship"]["denomination"](${south},${west},${north},${east}););out center;`;
-  const queries = [areaQuery, bboxQuery];
-  const endpoints = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
-  for (const query of queries) {
-    for (const endpoint of endpoints) {
-      try {
-        const res = await fetch(endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'GCM/1.0 (contact: admin@gcm.local)' },
-          body: `data=${encodeURIComponent(query)}`
-        });
-        if (!res.ok) {
-          const txt = await res.text().catch(() => '');
-          throw new Error(`Overpass ${endpoint} failed ${res.status} ${txt.slice(0,200)}`);
-        }
-        const json: any = await res.json();
-        const elements = Array.isArray(json.elements) ? json.elements : [];
-        const collected: Array<{ name: string; lat: number; lng: number; address: string }> = [];
-        for (const el of elements) {
-          const lat = typeof el.lat === 'number' ? el.lat : el.center?.lat;
-          const lng = typeof el.lon === 'number' ? el.lon : el.center?.lon;
-          if (typeof lat !== 'number' || typeof lng !== 'number') continue;
-          const tags = el.tags || {};
-          const religion = typeof tags.religion === 'string' ? tags.religion.toLowerCase() : '';
-          const building = typeof tags.building === 'string' ? tags.building.toLowerCase() : '';
-          if (religion === 'muslim') continue; // never mosques
-          if (!religion && building !== 'church' && !tags.denomination) continue;
-          const nameRaw = tags.name || tags['name:ar'] || tags['name:en'] || tags['name:ar:EG'] || '';
-          const name = typeof nameRaw === 'string' && nameRaw.trim() ? nameRaw.trim().slice(0, 200) : 'كنيسة';
-          if (MOSQUE_LIKE.test(name)) continue; // defensive name filter
-          if (name === 'كنيسة' && !tags.amenity && !tags.building && !tags.name) continue;
-          const address = typeof tags['addr:full'] === 'string' ? tags['addr:full'].slice(0,500) : (typeof tags.addr === 'string' ? tags.addr.slice(0,500) : '');
-          collected.push({ name, lat, lng, address });
-        }
-        if (collected.length > 0) return collected;
-      } catch (e) {
-        console.error('Overpass endpoint failed', endpoint, e);
-        continue;
-      }
-    }
-  }
-  return [];
-}
-
-// Insert real churches WITHOUT collapsing same-name churches (dedup by coordinates ~110m, not by name).
-async function insertRealChurches(supabase: any, governorate: string, real: Array<{ name: string; lat: number; lng: number; address: string }>): Promise<number> {
-  if (!real.length) return 0;
-  const { data: existing } = await supabase.from('churches').select('name,lat,lng').eq('governorate', governorate);
-  const seen = new Set<string>();
-  (existing || []).forEach((c: any) => {
-    seen.add(`${(c.name || '').trim().toLowerCase()}|${Number(c.lat).toFixed(3)}|${Number(c.lng).toFixed(3)}`);
-  });
-  let inserted = 0;
-  for (const ch of real) {
-    const key = `${ch.name.trim().toLowerCase()}|${ch.lat.toFixed(3)}|${ch.lng.toFixed(3)}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    const { error } = await supabase.from('churches').insert({ name: ch.name, governorate, lat: ch.lat, lng: ch.lng, address: ch.address });
-    if (!error) inserted++;
-  }
-  return inserted;
 }
 
 function isValidLeaderPhoto(value: unknown, isLegacyBase64Allowed = true): boolean {
