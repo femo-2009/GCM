@@ -8,22 +8,27 @@ permissions:
 
 jobs:
   generate-churches-sql:
-    name: Fetch OSM churches and prepare SQL
+    name: Download Egypt OSM extract and prepare SQL
     runs-on: ubuntu-latest
     timeout-minutes: 180
     steps:
       - name: Check out the repository
         uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          node-version: 22
+          python-version: "3.12"
 
-      - name: Run the church importer
+      - name: Install Osmium and Shapely
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes osmium-tool
+          python -m pip install --disable-pip-version-check "shapely>=2,<3"
+
+      - name: Run the offline Egypt church importer
         id: importer
-        continue-on-error: true
-        run: node scripts/gcm-churches-all.cjs
+        run: python scripts/gcm-churches-offline.py
 
       - name: Upload generated SQL file
         if: ${{ always() && hashFiles('churches-full.sql') != '' }}
@@ -39,11 +44,11 @@ jobs:
         shell: bash
         run: |
           if [ ! -s churches-full.sql ]; then
-            echo '::error::The importer did not create churches-full.sql. Check the importer log and run the workflow again.'
+            echo '::error::The offline importer did not create churches-full.sql. Check the importer log.'
             exit 1
           fi
           if grep -q '^-- WARNING: PARTIAL DATA' churches-full.sql; then
-            echo '::error::Some governorates failed. The SQL artifact was uploaded, but do not import it as a complete list. Run the workflow again later.'
+            echo '::error::Some matching OSM features could not be assigned to a governorate. The SQL artifact is available for inspection, but do not import it as a complete list.'
             exit 1
           fi
-          echo 'The importer reports that all governorate queries completed.'
+          echo 'The importer processed all matching OSM features and assigned them to the 27 governorates.'
